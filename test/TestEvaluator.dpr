@@ -6,7 +6,7 @@ uses
   System.SysUtils,
   System.Math,
   System.Variants,
-  ExprEvaluator;
+  ExprEvaluator in '..\ExprEvaluator.pas';
 
 procedure TestBasicArithmetic;
 var

@@ -3,3 +3,4 @@
 *.dproj.local
 *.dcu
 *.res
+*/__history/
