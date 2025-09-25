@@ -1,6 +1,6 @@
 # 🧮 Delphi Expression Evaluator
 
-[![Delphi](https://img.shields.io/badge/Delphi-12-red.svg)](https://www.embarcadero.com/products/delphi)
+[![Delphi](https://img.shields.io/badge/Delphi-10+-red.svg)](https://www.embarcadero.com/products/delphi)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-Passing-green.svg)](TestEvaluator.dpr)
 [![Interface](https://img.shields.io/badge/API-Interface%20Based-brightgreen.svg)](#-memory-management)
