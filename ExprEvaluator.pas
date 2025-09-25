@@ -1,4 +1,28 @@
-﻿unit ExprEvaluator;
+﻿// ***************************************************************************
+//
+// Delphi Expression Evaluator
+//
+// Copyright (c) 2024-2025 Daniele Teti
+//
+// https://github.com/danieleteti/delphi-expressions-evaluator
+//
+// ***************************************************************************
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// *************************************************************************** }
+
+unit ExprEvaluator;
 
 interface
 
@@ -8,7 +32,33 @@ uses
 type
   TFuncHandler = reference to function(const Args: array of Variant): Variant;
 
-  TExprEvaluator = class
+  /// <summary>
+  /// Interface for expression evaluation without manual memory management
+  /// </summary>
+  IExprEvaluator = interface
+    ['{A5B9C8D7-E6F4-4A2B-9C1D-8E7F6A5B4C3D}']
+    /// <summary>
+    /// Register a custom function
+    /// </summary>
+    procedure RegisterFunction(const Name: string; Handler: TFuncHandler);
+
+    /// <summary>
+    /// Evaluate a mathematical/logical expression
+    /// </summary>
+    function Evaluate(const Expr: string): Variant;
+
+    /// <summary>
+    /// Set a variable value
+    /// </summary>
+    procedure SetVar(const Name: string; Value: Variant);
+
+    /// <summary>
+    /// Get a variable value
+    /// </summary>
+    function GetVar(const Name: string): Variant;
+  end;
+
+  TExprEvaluator = class(TInterfacedObject, IExprEvaluator)
   private
     FFunctions: TDictionary<string, TFuncHandler>;
     FVariables: TDictionary<string, Variant>;
@@ -43,7 +93,17 @@ type
     function GetVar(const Name: string): Variant;
   end;
 
+/// <summary>
+/// Create a new expression evaluator instance
+/// </summary>
+function CreateExprEvaluator: IExprEvaluator;
+
 implementation
+
+function CreateExprEvaluator: IExprEvaluator;
+begin
+  Result := TExprEvaluator.Create;
+end;
 
 { TExprEvaluator }
 
