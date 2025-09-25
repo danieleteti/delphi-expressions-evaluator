@@ -1,0 +1,5 @@
+/__history/
+/.claude/settings.local.json
+*.dproj.local
+*.dcu
+*.res

@@ -15,7 +15,6 @@ type
     FInput: string;
     FPos: Integer;
 
-    function ParseExpression: Variant;
     function ParseIfExpression: Variant;
     function ParseLogical: Variant;
     function ParseRelational: Variant;
@@ -54,6 +53,9 @@ begin
   FFunctions := TDictionary<string, TFuncHandler>.Create;
   FVariables := TDictionary<string, Variant>.Create;
 
+  // Ensure we use dot as decimal separator for consistency
+  System.SysUtils.FormatSettings.DecimalSeparator := '.';
+
   // Register standard functions
   RegisterFunction('sqrt', function(const Args: array of Variant): Variant
     begin
@@ -81,6 +83,22 @@ begin
       if Length(Args) <> 1 then
         raise Exception.Create('ToString requires 1 argument');
       Result := VarToStr(Args[0]);
+    end);
+
+  // Add ToInteger function
+  RegisterFunction('ToInteger', function(const Args: array of Variant): Variant
+    begin
+      if Length(Args) <> 1 then
+        raise Exception.Create('ToInteger requires 1 argument');
+      Result := StrToInt(VarToStr(Args[0]));
+    end);
+
+  // Add ToFloat function
+  RegisterFunction('ToFloat', function(const Args: array of Variant): Variant
+    begin
+      if Length(Args) <> 1 then
+        raise Exception.Create('ToFloat requires 1 argument');
+      Result := StrToFloat(VarToStr(Args[0]), System.SysUtils.FormatSettings);
     end);
 end;
 
@@ -125,24 +143,24 @@ end;
 function TExprEvaluator.ParseAssignment: Variant;
 var
   Id: string;
-  OldPos: Integer;
+  SavePos: Integer;
 begin
   SkipWhitespace;
   if IsAlpha(CurrentChar) then
   begin
-    OldPos := FPos;
+    SavePos := FPos;
     Id := ParseIdentifier;
     SkipWhitespace;
     if Copy(FInput, FPos, 2) = ':=' then
     begin
       Inc(FPos, 2); // skip :=
       SkipWhitespace;
-      Result := ParseExpression;
+      Result := ParseIfExpression;
       SetVariable(Id, Result);
     end
     else
     begin
-      FPos := OldPos; // proper backtrack
+      FPos := SavePos; // backtrack to saved position
       Result := ParseIfExpression;
     end;
   end
@@ -154,7 +172,7 @@ function TExprEvaluator.ParseIfExpression: Variant;
 var
   Condition, ThenValue, ElseValue: Variant;
   IfWord: string;
-  OldPos: Integer;
+  SavePos: Integer;
 begin
   SkipWhitespace;
   if FPos > Length(FInput) then
@@ -163,18 +181,18 @@ begin
     Exit;
   end;
 
-  // Check if this looks like an IF statement
+  // Check if current character can start an identifier
   if not IsAlpha(CurrentChar) then
   begin
     Result := ParseLogical;
     Exit;
   end;
 
-  OldPos := FPos;
+  SavePos := FPos;
   IfWord := ParseIdentifier;
   if IfWord <> 'IF' then
   begin
-    FPos := OldPos; // proper backtrack
+    FPos := SavePos; // backtrack to saved position
     Result := ParseLogical;
     Exit;
   end;
@@ -279,7 +297,7 @@ begin
   if CurrentChar = '(' then
   begin
     NextChar; // skip '('
-    Result := ParseExpression;
+    Result := ParseIfExpression;
     SkipWhitespace;
     if CurrentChar <> ')' then
       raise Exception.Create('Unclosed parenthesis');
@@ -292,7 +310,7 @@ begin
   else if IsDigit(CurrentChar) then
   begin
     NumStr := ParseNumber;
-    Result := StrToFloat(NumStr, TFormatSettings.Create('en-US'));
+    Result := StrToFloat(NumStr, System.SysUtils.FormatSettings);
   end
   else if IsAlpha(CurrentChar) then
   begin
@@ -306,7 +324,7 @@ begin
       begin
         repeat
           SetLength(Args, Length(Args) + 1);
-          Args[High(Args)] := ParseExpression;
+          Args[High(Args)] := ParseIfExpression;
           SkipWhitespace;
           if CurrentChar = ',' then
           begin
@@ -368,7 +386,7 @@ begin
     if CharInSet(CurrentChar, ['m', 'M']) then
     begin
       if (UpperCase(Copy(FInput, FPos, 3)) = 'MOD') and
-         ((FPos + 3 > Length(FInput)) or not (IsAlpha(FInput[FPos + 3]) or IsDigit(FInput[FPos + 3]))) then
+         ((FPos + 3 > Length(FInput)) or CharInSet(FInput[FPos + 3], [' ', #9, #10, #13, ')', ';'])) then
       begin
         Inc(FPos, 3);
         SkipWhitespace;
@@ -434,6 +452,7 @@ begin
   Left := ParseAdditive;
   SkipWhitespace;
 
+  // Handle comparison operators
   if CharInSet(CurrentChar, ['<', '>', '=']) then
   begin
     if CurrentChar = '=' then
@@ -483,11 +502,6 @@ begin
     Result := Left;
 end;
 
-function TExprEvaluator.ParseExpression: Variant;
-begin
-  Result := ParseIfExpression;
-end;
-
 function TExprEvaluator.ParseLogical: Variant;
 var
   Left: Variant;
@@ -496,10 +510,11 @@ begin
   Left := ParseRelational;
   SkipWhitespace;
 
+  // Handle logical operators
   while True do
   begin
-    if (UpperCase(Copy(FInput, FPos, 3)) = 'AND') and 
-       ((FPos + 3 > Length(FInput)) or not (IsAlpha(FInput[FPos + 3]) or IsDigit(FInput[FPos + 3]))) then
+    if (UpperCase(Copy(FInput, FPos, 3)) = 'AND') and
+       ((FPos + 3 > Length(FInput)) or CharInSet(FInput[FPos + 3], [' ', #9, #10, #13, ')', ';'])) then
     begin
       Inc(FPos, 3);
       SkipWhitespace;
@@ -508,7 +523,7 @@ begin
       SkipWhitespace;
     end
     else if (UpperCase(Copy(FInput, FPos, 2)) = 'OR') and
-            ((FPos + 2 > Length(FInput)) or not (IsAlpha(FInput[FPos + 2]) or IsDigit(FInput[FPos + 2]))) then
+            ((FPos + 2 > Length(FInput)) or CharInSet(FInput[FPos + 2], [' ', #9, #10, #13, ')', ';'])) then
     begin
       Inc(FPos, 2);
       SkipWhitespace;
@@ -517,7 +532,7 @@ begin
       SkipWhitespace;
     end
     else if (UpperCase(Copy(FInput, FPos, 3)) = 'XOR') and
-            ((FPos + 3 > Length(FInput)) or not (IsAlpha(FInput[FPos + 3]) or IsDigit(FInput[FPos + 3]))) then
+            ((FPos + 3 > Length(FInput)) or CharInSet(FInput[FPos + 3], [' ', #9, #10, #13, ')', ';'])) then
     begin
       Inc(FPos, 3);
       SkipWhitespace;
@@ -532,6 +547,7 @@ begin
   Result := Left;
 end;
 
+
 function TExprEvaluator.CallFunction(const FuncName: string; Args: TArray<Variant>): Variant;
 var
   Handler: TFuncHandler;
@@ -543,17 +559,16 @@ end;
 
 function TExprEvaluator.GetVariable(const VarName: string): Variant;
 var
-  UpName: string;
+  UpperVarName: string;
 begin
-  UpName := UpperCase(VarName);
-  if UpName = 'TRUE' then
+  UpperVarName := UpperCase(VarName);
+
+  // Handle boolean constants
+  if UpperVarName = 'TRUE' then
     Result := True
-  else if UpName = 'FALSE' then
+  else if UpperVarName = 'FALSE' then
     Result := False
-  else if (UpName = 'IF') or (UpName = 'THEN') or (UpName = 'ELSE') or 
-          (UpName = 'AND') or (UpName = 'OR') or (UpName = 'XOR') or (UpName = 'MOD') then
-    raise Exception.Create('Unexpected use of keyword: ' + VarName)
-  else if not FVariables.TryGetValue(UpName, Result) then
+  else if not FVariables.TryGetValue(UpperVarName, Result) then
     raise Exception.Create('Unknown variable: ' + VarName);
 end;
 
