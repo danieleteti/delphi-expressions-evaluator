@@ -650,7 +650,12 @@ begin
 
       case Op of
         '*': Left := Left * Right;
-        '/': Left := Left / Right;
+        '/':
+          begin
+            if Right = 0 then
+              raise Exception.Create('Division by zero');
+            Left := Left / Right;
+          end;
       end;
     end;
     SkipWhitespace;

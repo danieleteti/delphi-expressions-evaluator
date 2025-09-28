@@ -1041,16 +1041,12 @@ begin
     TestIfThenElsePrecedence;
     TestAdvancedCombinations;
     TestInterfaceUsage;
-
-    Writeln('Running new tests...');
     TestNegativeNumbers;
     TestEdgeCases;
     TestBoundaryConditions;
     TestMinMaxFunctions;
     TestTypeValidation;
     TestSortFunction;
-
-    Writeln('Running comprehensive edge case tests...');
     TestFloatingPointEdgeCases;
     TestStringEdgeCases;
     TestBooleanLogicEdgeCases;
@@ -1058,8 +1054,6 @@ begin
     TestFunctionArgumentEdgeCases;
     TestExpressionComplexity;
     TestErrorRecoveryAndValidation;
-
-    Writeln('Running advanced edge case tests...');
     TestAdvancedSortEdgeCases;
     TestMinMaxAdvancedEdgeCases;
     TestPrecedenceAndAssociativity;
