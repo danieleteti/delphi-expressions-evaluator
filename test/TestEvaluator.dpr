@@ -6,6 +6,7 @@ uses
   System.SysUtils,
   System.Math,
   System.Variants,
+  System.DateUtils,
   ExprEvaluator in '..\ExprEvaluator.pas';
 
 procedure TestBasicArithmetic;
@@ -1026,6 +1027,168 @@ begin
   Writeln('Stress and performance tests passed.');
 end;
 
+procedure TestStringFunctions;
+var
+  Eval: IExprEvaluator;
+begin
+  Eval := CreateExprEvaluator;
+
+  // Test Length
+  Assert(Eval.Evaluate('Length("Hello")') = 5, 'Length("Hello") should be 5');
+  Assert(Eval.Evaluate('Length("")') = 0, 'Length("") should be 0');
+  Assert(Eval.Evaluate('Length("Test123")') = 7, 'Length("Test123") should be 7');
+
+  // Test Upper/Lower
+  Assert(Eval.Evaluate('Upper("hello")') = 'HELLO', 'Upper("hello") should be "HELLO"');
+  Assert(Eval.Evaluate('Lower("WORLD")') = 'world', 'Lower("WORLD") should be "world"');
+  Assert(Eval.Evaluate('Upper("MiXeD")') = 'MIXED', 'Upper should handle mixed case');
+  Assert(Eval.Evaluate('Lower("MiXeD")') = 'mixed', 'Lower should handle mixed case');
+
+  // Test Trim
+  Assert(Eval.Evaluate('Trim("  hello  ")') = 'hello', 'Trim should remove leading/trailing spaces');
+  Assert(Eval.Evaluate('Trim("test")') = 'test', 'Trim should not change strings without spaces');
+  Assert(Eval.Evaluate('Trim("   ")') = '', 'Trim should handle only spaces');
+
+  // Test Left/Right
+  Assert(Eval.Evaluate('Left("Hello", 3)') = 'Hel', 'Left("Hello", 3) should be "Hel"');
+  Assert(Eval.Evaluate('Right("Hello", 3)') = 'llo', 'Right("Hello", 3) should be "llo"');
+  Assert(Eval.Evaluate('Left("Test", 10)') = 'Test', 'Left should handle count > length');
+  Assert(Eval.Evaluate('Right("Test", 10)') = 'Test', 'Right should handle count > length');
+  Assert(Eval.Evaluate('Left("Hello", 0)') = '', 'Left with 0 should return empty');
+  Assert(Eval.Evaluate('Right("Hello", 0)') = '', 'Right with 0 should return empty');
+
+  // Test Substr
+  Assert(Eval.Evaluate('Substr("Hello", 2, 3)') = 'ell', 'Substr("Hello", 2, 3) should be "ell"');
+  Assert(Eval.Evaluate('Substr("Hello", 3)') = 'llo', 'Substr("Hello", 3) should be "llo"');
+  Assert(Eval.Evaluate('Substr("Test", 1, 2)') = 'Te', 'Substr should work with shorter strings');
+
+  // Test IndexOf
+  Assert(Eval.Evaluate('IndexOf("Hello World", "World")') = 7, 'IndexOf should find position 7');
+  Assert(Eval.Evaluate('IndexOf("Hello", "xyz")') = 0, 'IndexOf should return 0 for not found');
+  Assert(Eval.Evaluate('IndexOf("Test", "es")') = 2, 'IndexOf should find substring');
+  Assert(Eval.Evaluate('IndexOf("Hello", "Hello")') = 1, 'IndexOf should find full match at start');
+
+  // Test Replace
+  Assert(Eval.Evaluate('Replace("Hello World", "World", "Pascal")') = 'Hello Pascal', 'Replace should work');
+  Assert(Eval.Evaluate('Replace("Test Test", "Test", "Demo")') = 'Demo Demo', 'Replace should replace all occurrences');
+  Assert(Eval.Evaluate('Replace("Hello", "xyz", "abc")') = 'Hello', 'Replace should handle non-existent substring');
+
+  // Test combinations
+  Assert(Eval.Evaluate('Upper(Left("hello world", 5))') = 'HELLO', 'Combined string functions should work');
+  Assert(Eval.Evaluate('Length(Trim("  test  ")) + 1') = 5, 'String function in arithmetic should work');
+
+  Writeln('String functions tests passed.');
+end;
+
+procedure TestDateTimeFunctions;
+var
+  Eval: IExprEvaluator;
+  Today: TDateTime;
+  CurrentYear, CurrentMonth, CurrentDay: Word;
+begin
+  Eval := CreateExprEvaluator;
+
+  Today := Date;
+  DecodeDate(Today, CurrentYear, CurrentMonth, CurrentDay);
+
+  // Test Today
+  Assert(Trunc(Eval.Evaluate('Today()')) = Trunc(Today), 'Today() should return current date');
+
+  // Test Year/Month/Day with Today
+  Assert(Eval.Evaluate('Year(Today())') = CurrentYear, 'Year(Today()) should work');
+  Assert(Eval.Evaluate('Month(Today())') = CurrentMonth, 'Month(Today()) should work');
+  Assert(Eval.Evaluate('Day(Today())') = CurrentDay, 'Day(Today()) should work');
+
+  // Test ParseDate with YYYY-MM-DD format
+  Eval.Evaluate('testDate := ParseDate("2024-01-01")');
+  Assert(Eval.Evaluate('Year(testDate)') = 2024, 'ParseDate should work with YYYY-MM-DD');
+  Assert(Eval.Evaluate('Month(testDate)') = 1, 'ParseDate month should work');
+  Assert(Eval.Evaluate('Day(testDate)') = 1, 'ParseDate day should work');
+
+  // Test more ParseDate examples
+  Eval.Evaluate('endYear := ParseDate("2024-12-31")');
+  Assert(Eval.Evaluate('Year(endYear)') = 2024, 'ParseDate end of year should work');
+  Assert(Eval.Evaluate('Month(endYear)') = 12, 'ParseDate December should work');
+  Assert(Eval.Evaluate('Day(endYear)') = 31, 'ParseDate 31st should work');
+
+  // Test DateAdd
+  Assert(Eval.Evaluate('Year(DateAdd(testDate, 366))') = 2025, 'DateAdd should work (leap year)');
+  Eval.Evaluate('nextDay := DateAdd(testDate, 1)');
+  Assert(Eval.Evaluate('Day(nextDay)') = 2, 'DateAdd 1 day should work');
+
+  // Test DateDiff
+  Eval.Evaluate('date1 := ParseDate("2024-01-01"); date2 := ParseDate("2024-01-02")');
+  Assert(Eval.Evaluate('DateDiff(date1, date2)') = 1, 'DateDiff should return 1 day');
+
+  Eval.Evaluate('date3 := ParseDate("2024-01-01"); date4 := ParseDate("2024-01-10")');
+  Assert(Eval.Evaluate('DateDiff(date3, date4)') = 9, 'DateDiff should work with larger differences');
+
+  // Test FormatDate
+  Assert(Eval.Evaluate('FormatDate(testDate, "yyyy-mm-dd")') = '2024-01-01', 'FormatDate should work');
+
+  // Test invalid date formats (should raise exceptions)
+  try
+    Eval.Evaluate('ParseDate("01/01/2024")');
+    Assert(False, 'ParseDate should reject MM/DD/YYYY format');
+  except
+    // Expected exception
+  end;
+
+  try
+    Eval.Evaluate('ParseDate("2024-13-01")');
+    Assert(False, 'ParseDate should reject invalid month');
+  except
+    // Expected exception
+  end;
+
+  try
+    Eval.Evaluate('ParseDate("2024-01-32")');
+    Assert(False, 'ParseDate should reject invalid day');
+  except
+    // Expected exception
+  end;
+
+  Writeln('Date/Time functions tests passed.');
+end;
+
+procedure TestCommentSupport;
+var
+  Eval: IExprEvaluator;
+begin
+  Eval := CreateExprEvaluator;
+
+  // Test // comments
+  Assert(Eval.Evaluate('5 + 3 // This is a comment') = 8, '// comments should work');
+  Assert(Eval.Evaluate('10 * 2 // Another comment') = 20, 'Expression with // comment should work');
+
+  // Test { } comments
+  Assert(Eval.Evaluate('5 + {this is a comment} 3') = 8, '{ } comments should work');
+  Assert(Eval.Evaluate('10 * {comment} 2') = 20, 'Expression with { } comment should work');
+
+  // Test nested expressions with comments
+  Assert(Eval.Evaluate('if 5 > 3 {condition} then "yes" {then} else "no" {else}') = 'yes', 'Comments in conditionals should work');
+
+  // Test comments with functions
+  Assert(Eval.Evaluate('Length("test") {get length} + 2 // add 2') = 6, 'Comments with functions should work');
+
+  // Test comments at different positions
+  Assert(Eval.Evaluate('{start comment} 5 + 3') = 8, 'Comment at start should work');
+  Assert(Eval.Evaluate('5 + 3 {end comment}') = 8, 'Comment at end should work');
+
+  // Test multiple comments
+  Assert(Eval.Evaluate('5 {first} + 3 {second}') = 8, 'Multiple comments should work');
+
+  // Test unterminated comment should raise exception
+  try
+    Eval.Evaluate('5 + {unterminated comment');
+    Assert(False, 'Unterminated comment should raise exception');
+  except
+    // Expected exception
+  end;
+
+  Writeln('Comment support tests passed.');
+end;
+
 begin
   try
     Writeln('Running test suite...');
@@ -1059,6 +1222,11 @@ begin
     TestPrecedenceAndAssociativity;
     TestSpecialValueHandling;
     TestStressAndPerformance;
+
+    Writeln('Running new features tests...');
+    TestStringFunctions;
+    TestDateTimeFunctions;
+    TestCommentSupport;
 
     Writeln('All tests passed!');
   except
