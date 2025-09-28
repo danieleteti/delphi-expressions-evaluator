@@ -17,6 +17,9 @@ begin
   Assert(Eval.Evaluate('3 * (3 + 2)') = 15, '3 * (3 + 2) should be 15');
   Assert(Eval.Evaluate('3 ^ 2') = 9, '3 ^ 2 should be 9');
   Assert(Eval.Evaluate('10 mod 3') = 1, '10 mod 3 should be 1');
+  Assert(Eval.Evaluate('10 div 3') = 3, '10 div 3 should be 3');
+  Assert(Eval.Evaluate('17 div 5') = 3, '17 div 5 should be 3');
+  Assert(Eval.Evaluate('20 div 4') = 5, '20 div 4 should be 5');
   Writeln('Basic arithmetic tests passed.');
 end;
 
@@ -70,12 +73,15 @@ var
   Eval: IExprEvaluator;
 begin
   Eval := CreateExprEvaluator;
+  Assert(Eval.Evaluate('contains("hello","hello world")') = True, 'contains("hello","hello world") should be True');
   Assert(Eval.Evaluate('sqrt(16)') = 4, 'sqrt(16) should be 4');
   Assert(Abs(Eval.Evaluate('logn(2.71828)') - 1) < 0.01, 'logn(2.71828) should be ~1');
   Assert(Eval.Evaluate('log(100)') = 2, 'log(100) should be 2');
   Assert(Eval.Evaluate('ToString(42)') = '42', 'ToString(42) should be "42"');
   Assert(Eval.Evaluate('ToInteger("123")') = 123, 'ToInteger("123") should be 123');
   Assert(Eval.Evaluate('ToFloat("123.45")') = 123.45, 'ToFloat("123.45") should be 123.45');
+  {TODO -oDanieleT -cGeneral : Non gestisce numeri negativi!}
+  Assert(Eval.Evaluate('Round(123.45, 0)') = 123, 'Round(123.45, 0) should be 123');
   Writeln('Function tests passed.');
 end;
 
@@ -84,6 +90,7 @@ var
   Eval: IExprEvaluator;
 begin
   Eval := CreateExprEvaluator;
+  Assert(Eval.Evaluate('if contains("hello","hello world") then "YES" else "NO"') = 'YES', 'if contains("hello","hello world") then "YES" else "NO" should be "YES"');
   Assert(Eval.Evaluate('if 3 > 2 then "Yes" else "No"') = 'Yes', 'if 3 > 2 then "Yes" else "No" should be "Yes"');
   Assert(Eval.Evaluate('if 1 > 2 then "A" else if 2 > 1 then "B" else "C"') = 'B', 'Nested if should return "B"');
   Writeln('If-Then-Else tests passed.');

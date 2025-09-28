@@ -138,6 +138,20 @@ begin
       Result := System.Math.Log10(Args[0]);
     end);
 
+  RegisterFunction('round', function(const Args: array of Variant): Variant
+    begin
+      if Length(Args) <> 2 then
+        raise Exception.Create('Round requires 2 argument');
+      Result := System.Math.RoundTo(Args[0], Args[1]);
+    end);
+
+  RegisterFunction('contains', function(const Args: array of Variant): Variant
+    begin
+      if Length(Args) <> 2 then
+        raise Exception.Create('Contains requires 2 argument');
+      Result := String(Args[1]).Contains(String(Args[0]), True);
+    end);
+
   RegisterFunction('ToString', function(const Args: array of Variant): Variant
     begin
       if Length(Args) <> 1 then
@@ -441,7 +455,7 @@ begin
   Left := ParseFactor;
   SkipWhitespace;
 
-  while CharInSet(CurrentChar, ['*', '/', 'm', 'M']) do
+  while CharInSet(CurrentChar, ['*', '/', 'm', 'M', 'd', 'D']) do
   begin
     if CharInSet(CurrentChar, ['m', 'M']) then
     begin
@@ -452,6 +466,19 @@ begin
         SkipWhitespace;
         Right := ParseFactor;
         Left := Trunc(Left) mod Trunc(Right);
+      end
+      else
+        Break;
+    end
+    else if CharInSet(CurrentChar, ['d', 'D']) then
+    begin
+      if (UpperCase(Copy(FInput, FPos, 3)) = 'DIV') and
+         ((FPos + 3 > Length(FInput)) or CharInSet(FInput[FPos + 3], [' ', #9, #10, #13, ')', ';'])) then
+      begin
+        Inc(FPos, 3);
+        SkipWhitespace;
+        Right := ParseFactor;
+        Left := Trunc(Left) div Trunc(Right);
       end
       else
         Break;
