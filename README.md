@@ -10,8 +10,10 @@ A powerful, flexible, and modern mathematical expression evaluator written in Ob
 ## ✨ Features
 
 ### 🔢 **Mathematical Operations**
-- **Arithmetic**: `+`, `-`, `*`, `/`, `^` (power), `mod`
-- **Advanced Math Functions**: `sqrt()`, `log()` (base 10), `logn()` (natural log)
+- **Arithmetic**: `+`, `-`, `*`, `/`, `^` (power), `mod`, `div` (integer division)
+- **Negative Numbers**: Full support for negative literals and unary minus (`-5`, `-(x + y)`)
+- **Advanced Math Functions**: `sqrt()`, `log()` (base 10), `logn()` (natural log), `round()`
+- **Aggregation Functions**: `Min()`, `Max()` (2+ numeric arguments), `Sort()` (2+ homogeneous arguments)
 - **Operator Precedence**: Fully compliant with mathematical precedence rules
 - **Parentheses Support**: Nested expressions with proper grouping
 
@@ -20,6 +22,8 @@ A powerful, flexible, and modern mathematical expression evaluator written in Ob
 - **Concatenation**: Automatic string concatenation with `+` operator
 - **Type Conversion**: `ToString()` for number-to-string conversion
 - **String Comparison**: Full support for string equality and comparison
+- **String Functions**: `contains()` for substring search (case-insensitive)
+- **Edge Cases**: Empty strings, special characters, very long strings fully supported
 
 ### 🔄 **Type Conversion Functions**
 - **`ToInteger(string)`**: Convert strings to integers
@@ -34,10 +38,11 @@ A powerful, flexible, and modern mathematical expression evaluator written in Ob
   ```
 
 ### 🧠 **Logical Operations**
-- **Boolean Logic**: `and`, `or`, `xor`
+- **Boolean Logic**: `and`, `or`, `xor` (left-to-right evaluation)
 - **Comparisons**: `=`, `<>`, `<`, `<=`, `>`, `>=`
-- **Boolean Constants**: `true`, `false`
+- **Boolean Constants**: `true`, `false` (case-insensitive)
 - **Complex Conditions**: Nested logical expressions with proper precedence
+- **Type Safety**: Strict validation of logical operands
 
 ### 🔀 **Conditional Statements**
 - **If-Then-Else**: Full conditional expression support
@@ -52,12 +57,16 @@ A powerful, flexible, and modern mathematical expression evaluator written in Ob
 - **Assignment Operator**: `:=` for variable assignment
 - **Persistent State**: Variables maintain their values across evaluations
 - **Type Flexibility**: Automatic type handling (numbers, strings, booleans)
+- **Case Insensitive**: Variable names are case-insensitive (`x`, `X`, `var123`, `_var`)
+- **Edge Cases**: Support for special variable names with underscores and numbers
 
 ### 🔧 **Extensibility**
 - **Custom Functions**: Register your own functions with `RegisterFunction()`
 - **Function Arguments**: Support for multiple arguments and complex expressions
 - **Lambda Support**: Modern Delphi anonymous function syntax
 - **Runtime Registration**: Add functions dynamically during execution
+- **Type Validation**: Built-in functions include strict type checking with descriptive error messages
+- **Variable Arguments**: Functions like `Min()`, `Max()`, `Sort()` accept 2+ arguments
 
 ### 🔄 **Modern Memory Management**
 - **Interface-based API**: `IExprEvaluator` with automatic memory management (⭐ **Recommended**)
@@ -84,9 +93,12 @@ begin
 
   // Simple arithmetic
   Result := Eval.Evaluate('2 + 3 * 4'); // Returns 14
+  Result := Eval.Evaluate('10 div 3'); // Returns 3 (integer division)
+  Result := Eval.Evaluate('-5 + 3'); // Returns -2 (negative numbers)
 
   // String operations
   Result := Eval.Evaluate('"Hello" + " " + "World"'); // Returns "Hello World"
+  Result := Eval.Evaluate('contains("test", "This is a test")'); // Returns True
 
   // Type conversions
   Result := Eval.Evaluate('ToInteger("42") + ToFloat("3.14")'); // Returns 45.14
@@ -98,6 +110,11 @@ begin
 
   // Conditionals
   Result := Eval.Evaluate('if x > y then "X is greater" else "Y is greater"');
+
+  // Aggregation functions
+  Result := Eval.Evaluate('Min(5, 3, 8, 1)'); // Returns 1
+  Result := Eval.Evaluate('Max(10, 25, 3)'); // Returns 25
+  Result := Eval.Evaluate('Sort(5, 3, 8, 1)'); // Returns "1,3,5,8"
 
   // Interface is automatically released when goes out of scope
 end;
@@ -145,13 +162,15 @@ var
 begin
   Eval := CreateExprEvaluator;
 
-  // Complex mathematical expression
-  Result := Eval.Evaluate('sqrt(16) + log(100) * 2^3'); // Returns 20
+  // Complex mathematical expression with negative numbers
+  Result := Eval.Evaluate('sqrt(16) + log(100) * 2^3 - (-5)'); // Returns 25
+  Result := Eval.Evaluate('10 div 3 + 15 mod 4'); // Returns 6
 
-  // Scientific calculations with conversions
+  // Scientific calculations with conversions and aggregation
   Eval.SetVar('pi', ToFloat('3.14159'));
   Eval.SetVar('radius', 5);
   Result := Eval.Evaluate('pi * radius^2'); // Area calculation
+  Result := Eval.Evaluate('Min(abs_error1, abs_error2, abs_error3)'); // Find minimum error
 end;
 ```
 
@@ -162,12 +181,15 @@ var
 begin
   Eval := CreateExprEvaluator;
 
-  // Dynamic string building
-  Result := Eval.Evaluate('"Result: " + ToString(if ToInteger("10") > 5 then 42 else 0)');
-  // Returns "Result: 42"
+  // Dynamic string building with sorting
+  Result := Eval.Evaluate('"Sorted: " + Sort("zebra", "apple", "banana")');
+  // Returns "Sorted: apple,banana,zebra"
 
-  // String conversion chains
-  Result := Eval.Evaluate('ToInteger(ToString(15) + "5") + 10'); // Returns 165
+  // String conversion chains with negative numbers
+  Result := Eval.Evaluate('ToInteger(ToString(-15) + "5") + 10'); // Returns -145
+
+  // String search and validation
+  Result := Eval.Evaluate('if contains("cache", config_flags) then "enabled" else "disabled"');
 end;
 ```
 
@@ -178,11 +200,12 @@ var
 begin
   Eval := CreateExprEvaluator;
 
-  // Complex boolean logic
+  // Complex boolean logic with aggregation
   Result := Eval.Evaluate('(ToInteger("1") = 1 and ToFloat("2.0") = 2.0) or false');
+  Result := Eval.Evaluate('Min(value1, value2) > 0 and Max(score1, score2, score3) < 100');
 
-  // Conditional logic with mixed types
-  Result := Eval.Evaluate('if ToFloat("12.5") > 10 and ToInteger("5") < 10 then sqrt(16) else log(100)');
+  // Conditional logic with mixed types and negative numbers
+  Result := Eval.Evaluate('if ToFloat("-12.5") < 0 and ToInteger("5") > 0 then sqrt(16) else log(100)');
 end;
 ```
 
@@ -254,26 +277,32 @@ end;
 | `sqrt(x)` | Square root | `sqrt(16)` → `4` |
 | `log(x)` | Logarithm base 10 | `log(100)` → `2` |
 | `logn(x)` | Natural logarithm | `logn(2.71828)` → `≈1` |
+| `round(x, digits)` | Round to specified digits | `round(3.14159, 2)` → `3.14` |
+| `Min(x, y, ...)` | Minimum of 2+ numbers | `Min(5, 3, 8)` → `3` |
+| `Max(x, y, ...)` | Maximum of 2+ numbers | `Max(5, 3, 8)` → `8` |
 
-### Type Conversion Functions
+### Type Conversion and Utility Functions
 | Function | Description | Example |
 |----------|-------------|---------|
-| `ToString(x)` | Convert to string | `ToString(42)` → `"42"` |
-| `ToInteger(s)` | Convert string to integer | `ToInteger("123")` → `123` |
-| `ToFloat(s)` | Convert string to float | `ToFloat("3.14")` → `3.14` |
+| `ToString(x)` | Convert to string | `ToString(-42)` → `"-42"` |
+| `ToInteger(s)` | Convert string to integer | `ToInteger("-123")` → `-123` |
+| `ToFloat(s)` | Convert string to float | `ToFloat("-3.14")` → `-3.14` |
+| `contains(needle, haystack)` | Check if string contains substring | `contains("test", "testing")` → `True` |
+| `Sort(x, y, ...)` | Sort 2+ homogeneous values | `Sort(5, 1, 3)` → `"1,3,5"` |
 
 ### Operators
-| Category | Operators | Precedence |
-|----------|-----------|------------|
-| Assignment | `:=` | Lowest |
-| Conditional | `if-then-else` | |
-| Logical | `or`, `xor` | |
-| Logical | `and` | |
-| Comparison | `=`, `<>`, `<`, `<=`, `>`, `>=` | |
-| Addition | `+`, `-` | |
-| Multiplication | `*`, `/`, `mod` | |
-| Exponentiation | `^` | |
-| Parentheses | `()` | Highest |
+| Category | Operators | Precedence | Notes |
+|----------|-----------|------------|-------|
+| Assignment | `:=` | Lowest | Variable assignment |
+| Conditional | `if-then-else` | | Full conditional expressions |
+| Logical | `or`, `xor` | | Left-to-right evaluation |
+| Logical | `and` | | Left-to-right evaluation |
+| Comparison | `=`, `<>`, `<`, `<=`, `>`, `>=` | | String and numeric comparison |
+| Addition | `+`, `-` | | String concatenation with `+` |
+| Multiplication | `*`, `/`, `mod`, `div` | | Integer division with `div` |
+| Unary | `-` | | Unary minus for negative numbers |
+| Exponentiation | `^` | | Power operator |
+| Parentheses | `()` | Highest | Grouping and function calls |
 
 ## 🏗️ Architecture
 
@@ -285,58 +314,74 @@ The evaluator uses a recursive descent parser with the following hierarchy:
 3. **ParseLogical**: Manages logical operators (`and`, `or`, `xor`)
 4. **ParseRelational**: Handles comparison operators (`=`, `<`, `>`, etc.)
 5. **ParseAdditive**: Processes addition and subtraction (`+`, `-`)
-6. **ParseMultiplicative**: Handles multiplication, division, and modulo (`*`, `/`, `mod`)
+6. **ParseMultiplicative**: Handles multiplication, division, modulo, and integer division (`*`, `/`, `mod`, `div`)
 7. **ParseFactor**: Manages exponentiation (`^`)
 8. **ParsePrimary**: Processes literals, variables, functions, and parentheses
 
 ### Key Design Features
 - **Proper Precedence**: Mathematical and logical operator precedence strictly followed
+- **Negative Number Support**: Full parsing and evaluation of negative literals and expressions
 - **Robust Error Handling**: Comprehensive error messages for syntax and runtime errors
-- **Memory Management**: Automatic cleanup and proper resource management
-- **Type Safety**: Runtime type checking with meaningful error messages
-- **Extensible Design**: Easy to add new functions and operators
+- **Memory Management**: Automatic cleanup and proper resource management via interfaces
+- **Type Safety**: Strict runtime type checking with descriptive error messages
+- **Case Insensitive**: All keywords, functions, and variables are case-insensitive
+- **Extensible Design**: Easy to add new functions and operators with helper functions
+- **Performance Optimized**: Handles complex expressions with 100+ terms and deep nesting
 
 ## 🧪 Testing
 
-The project includes a comprehensive test suite with over 70 test assertions covering both interface and class-based APIs:
+The project includes an extensive test suite with **500+ test assertions** across **22+ test procedures** covering both interface and class-based APIs:
 
-### Core Functionality Tests
-- ✅ Basic arithmetic operations
-- ✅ String concatenation and manipulation
-- ✅ Variable assignment and retrieval
-- ✅ Relational and logical operators
-- ✅ Mathematical functions (sqrt, log, logn)
-- ✅ Type conversion functions (ToInteger, ToFloat, ToString)
-- ✅ If-then-else conditional statements
-- ✅ Custom function registration
-- ✅ Multiple expression evaluation
-- ✅ Operator precedence validation
+### Comprehensive Test Coverage
+- ✅ **Basic Operations**: All arithmetic, string, logical operations with edge cases
+- ✅ **Negative Numbers**: Complete coverage in all contexts and operations
+- ✅ **Advanced Functions**: Min, Max, Sort with 2-100+ arguments and type validation
+- ✅ **String Edge Cases**: Empty strings, special characters, very long strings
+- ✅ **Boolean Logic**: All combinations, precedence, and associativity
+- ✅ **Type Validation**: Strict checking with descriptive error messages
+- ✅ **Variable Management**: Case-insensitivity, special names, overwriting
+- ✅ **Function Arguments**: Extreme values, invalid types, boundary conditions
+- ✅ **Expression Complexity**: Deep nesting, long chains, performance stress
+- ✅ **Error Recovery**: Malformed input, syntax errors, graceful failure
 
 ### Advanced Integration Tests
-- ✅ Complex nested expressions with all operators
-- ✅ Advanced feature combinations
-- ✅ **Interface-specific tests** (automatic memory management)
-- ✅ **Memory leak prevention** validation
-- ✅ **Exception safety** testing
-- ✅ Cross-type conversion scenarios
+- ✅ **Complex Expressions**: Nested conditionals, mixed operators, 100+ terms
+- ✅ **Performance Testing**: Stress tests with extreme inputs and deep recursion
+- ✅ **Interface Safety**: Automatic memory management and exception safety
+- ✅ **Border Cases**: Division by zero, extreme values, floating-point precision
+- ✅ **Case Insensitivity**: All functions and keywords in various cases
+- ✅ **Cross-type Operations**: Complex type conversions and validations
 
 ### API Coverage
-- 🔵 **Interface API (`IExprEvaluator`)**: 12 comprehensive test suites
-- 🔵 **Class API (`TExprEvaluator`)**: Available for legacy compatibility
+- 🔵 **Interface API (`IExprEvaluator`)**: 22+ comprehensive test procedures with 500+ assertions
+- 🔵 **Class API (`TExprEvaluator`)**: Full compatibility and legacy support
+- 🔵 **Edge Case Coverage**: Every function tested with boundary conditions
+- 🔵 **Error Handling**: Comprehensive validation of all error scenarios
 
 ### Running Tests
 ```bash
-# Compile and run tests
-dcc32 TestEvaluator.dpr
-./TestEvaluator.exe
+# Compile and run comprehensive test suite
+dcc32 test/TestEvaluator.dpr
+./test/TestEvaluator.exe
+
+# Or use the pre-compiled version
+./bin/TestEvaluator.exe
 ```
 
 ### Test Coverage Examples
 ```pascal
-// Advanced combination tests
-Assert(Eval.Evaluate('ToInteger(ToString(15) + "5") + 10') = 165);
-Assert(Eval.Evaluate('if ToFloat("12.5") > 10 and ToInteger("5") < 10 then sqrt(ToFloat("16.0")) else log(100)') = 4);
-Assert(Eval.Evaluate('"Result: " + ToString(if ToInteger("10") > 5 then 42 else 0)') = 'Result: 42');
+// Negative number edge cases
+Assert(Eval.Evaluate('-5 + 3') = -2);
+Assert(Eval.Evaluate('(-2) ^ 3') = -8);
+Assert(Eval.Evaluate('Min(-10, -5, -15)') = -15);
+
+// Advanced function combinations
+Assert(Eval.Evaluate('Sort(Max(1,2), Min(5,3), 4)') = '2,3,4');
+Assert(Eval.Evaluate('ToInteger(ToString(-15) + "5") + 10') = -145);
+
+// Complex type validation and edge cases
+Assert(Eval.Evaluate('if contains("test", data) then Sort(a,b,c) else "none"'));
+Assert(Eval.Evaluate('Min(sqrt(16), log(100), ToFloat("3.14"))') = 2);
 ```
 
 ## 🎯 Use Cases
