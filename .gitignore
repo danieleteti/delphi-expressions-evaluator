@@ -5,3 +5,4 @@
 *.res
 */__history/
 /CLAUDE.md
+/unittest/dunitx-results.xml
