@@ -121,6 +121,14 @@ begin
   Assert.AreEqual<Boolean>(False, FEval.Evaluate('True and False'));
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('True or False'));
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('True xor False'));
+
+  // NOT operator tests
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('not True'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('not False'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('not (5 < 3)'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('not (5 > 3)'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('not False and True'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('not True or False'));
 end;
 
 // 6. TestFunctions
@@ -133,6 +141,16 @@ begin
   Assert.AreEqual<Integer>(123, FEval.Evaluate('ToInteger("123")'));
   Assert.AreEqual<Double>(123.45, FEval.Evaluate('ToFloat("123.45")'));
   Assert.AreEqual<Integer>(123, FEval.Evaluate('Round(123.45, 0)'));
+
+  // New math functions
+  Assert.AreEqual<Integer>(5, FEval.Evaluate('abs(5)'));
+  Assert.AreEqual<Integer>(5, FEval.Evaluate('abs(-5)'));
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('floor(3.7)'));
+  Assert.AreEqual<Integer>(-4, FEval.Evaluate('floor(-3.2)'));
+  Assert.AreEqual<Integer>(4, FEval.Evaluate('ceil(3.2)'));
+  Assert.AreEqual<Integer>(-3, FEval.Evaluate('ceil(-3.7)'));
+  Assert.AreEqual<Integer>(8, FEval.Evaluate('power(2, 3)'));
+  Assert.AreEqual<Integer>(125, FEval.Evaluate('power(5, 3)'));
 end;
 
 // 7. TestIfThenElse
@@ -333,6 +351,12 @@ procedure TExprEvaluatorTests.TestAdvancedSortEdgeCases;
 begin
   Assert.AreEqual<string>('5,5,5', FEval.Evaluate('Sort(5, 5, 5)'));
   Assert.AreEqual<string>('1,2,3,4,5,6,7,8,9,10', FEval.Evaluate('Sort(10, 9, 8, 7, 6, 5, 4, 3, 2, 1)'));
+
+  // QuickSort stress test with larger dataset
+  Assert.AreEqual<string>('1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20',
+    FEval.Evaluate('Sort(20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)'));
+  Assert.AreEqual<string>('1,5,7,12,15,23,45,67,89,100',
+    FEval.Evaluate('Sort(45, 23, 7, 89, 1, 100, 5, 67, 15, 12)'));
 end;
 
 procedure TExprEvaluatorTests.TestMinMaxAdvancedEdgeCases;

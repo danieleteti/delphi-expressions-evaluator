@@ -153,7 +153,7 @@ begin
   ColorWriteln(SEPARATOR, ccCyan);
   Writeln('  Arithmetic: +, -, *, /, div, mod, ^');
   Writeln('  Comparison: =, <>, <, <=, >, >=');
-  Writeln('  Logical:    and, or, xor');
+  Writeln('  Logical:    and, or, xor, not');
   Writeln('  Assignment: :=  (e.g., x := 42)');
   Writeln;
 
@@ -163,6 +163,10 @@ begin
   Writeln('  log(x)            - Logarithm base 10');
   Writeln('  logn(x)           - Natural logarithm');
   Writeln('  round(x, digits)  - Round to specified digits');
+  Writeln('  abs(x)            - Absolute value');
+  Writeln('  floor(x)          - Floor function');
+  Writeln('  ceil(x)           - Ceiling function');
+  Writeln('  power(x, y)       - Power function (x^y)');
   Writeln('  Min(x, y, ...)    - Minimum value (2+ args)');
   Writeln('  Max(x, y, ...)    - Maximum value (2+ args)');
   Writeln;
@@ -246,7 +250,7 @@ begin
   ColorWriteln(SEPARATOR, ccCyan);
   Writeln;
   ColorWriteln('Mathematical:', ccBrightCyan);
-  Writeln('  sqrt, log, logn, round, Min, Max');
+  Writeln('  sqrt, log, logn, round, abs, floor, ceil, power, Min, Max');
   Writeln;
   ColorWriteln('Type Conversion:', ccBrightCyan);
   Writeln('  ToString, ToInteger, ToFloat');

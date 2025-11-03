@@ -64,6 +64,7 @@ type
     FVariables: TDictionary<string, Variant>;
     FInput: string;
     FPos: Integer;
+    FFormatSettings: TFormatSettings;
 
     function ParseIfExpression: Variant;
     function ParseLogical: Variant;
@@ -86,6 +87,12 @@ type
     function ParseAssignment: Variant;
     function IsKeywordAtPosition(const Keyword: string): Boolean;
     function ConsumeKeyword(const Keyword: string): Boolean;
+    // Helper methods for argument validation
+    procedure ValidateArgCount(const FuncName: string; Expected, Actual: Integer);
+    procedure ValidateNumeric(const FuncName: string; const Arg: Variant);
+    // Helper methods for QuickSort
+    procedure QuickSortNumeric(var Arr: TArray<Double>; Low, High: Integer);
+    procedure QuickSortString(var Arr: TArray<string>; Low, High: Integer);
   public
     constructor Create;
     destructor Destroy; override;
@@ -115,8 +122,9 @@ begin
   FFunctions := TDictionary<string, TFuncHandler>.Create;
   FVariables := TDictionary<string, Variant>.Create;
 
-  // Ensure we use dot as decimal separator for consistency
-  System.SysUtils.FormatSettings.DecimalSeparator := '.';
+  // Create local FormatSettings with dot as decimal separator
+  FFormatSettings := TFormatSettings.Create('en-US');
+  FFormatSettings.DecimalSeparator := '.';
 
   // Register standard functions
   RegisterFunction('sqrt', function(const Args: array of Variant): Variant
@@ -157,6 +165,35 @@ begin
       Result := System.Math.RoundTo(Args[0], Args[1]);
     end);
 
+  RegisterFunction('abs', function(const Args: array of Variant): Variant
+    begin
+      ValidateArgCount('abs', 1, Length(Args));
+      ValidateNumeric('abs', Args[0]);
+      Result := Abs(Args[0]);
+    end);
+
+  RegisterFunction('floor', function(const Args: array of Variant): Variant
+    begin
+      ValidateArgCount('floor', 1, Length(Args));
+      ValidateNumeric('floor', Args[0]);
+      Result := Floor(Args[0]);
+    end);
+
+  RegisterFunction('ceil', function(const Args: array of Variant): Variant
+    begin
+      ValidateArgCount('ceil', 1, Length(Args));
+      ValidateNumeric('ceil', Args[0]);
+      Result := Ceil(Args[0]);
+    end);
+
+  RegisterFunction('power', function(const Args: array of Variant): Variant
+    begin
+      ValidateArgCount('power', 2, Length(Args));
+      ValidateNumeric('power', Args[0]);
+      ValidateNumeric('power', Args[1]);
+      Result := Power(Args[0], Args[1]);
+    end);
+
   RegisterFunction('contains', function(const Args: array of Variant): Variant
     begin
       if Length(Args) <> 2 then
@@ -186,7 +223,7 @@ begin
     begin
       if Length(Args) <> 1 then
         raise Exception.Create('ToFloat requires 1 argument');
-      Result := StrToFloat(VarToStr(Args[0]), System.SysUtils.FormatSettings);
+      Result := StrToFloat(VarToStr(Args[0]), FFormatSettings);
     end);
 
   // Add Min function (2 or more numeric arguments)
@@ -238,16 +275,18 @@ begin
   // Add Sort function (2 or more homogeneous arguments)
   RegisterFunction('Sort', function(const Args: array of Variant): Variant
     var
-      I, J: Integer;
+      I: Integer;
       IsNumeric: Boolean;
       NumericValues: TArray<Double>;
       StringValues: TArray<string>;
-      Temp: Double;
-      TempStr: string;
       ResultStr: string;
+      LocalFS: TFormatSettings;
     begin
       if Length(Args) < 2 then
         raise Exception.Create('Sort requires at least 2 arguments');
+
+      // Use local format settings with dot as decimal separator
+      LocalFS := FFormatSettings;
 
       // Determine if arguments are numeric or string by checking first argument
       IsNumeric := VarIsNumeric(Args[0]);
@@ -263,27 +302,17 @@ begin
           NumericValues[I] := Args[I];
         end;
 
-        // Simple bubble sort for numeric values
-        for I := 0 to High(NumericValues) - 1 do
-        begin
-          for J := 0 to High(NumericValues) - I - 1 do
-          begin
-            if NumericValues[J] > NumericValues[J + 1] then
-            begin
-              Temp := NumericValues[J];
-              NumericValues[J] := NumericValues[J + 1];
-              NumericValues[J + 1] := Temp;
-            end;
-          end;
-        end;
+        // QuickSort for numeric values
+        QuickSortNumeric(NumericValues, 0, High(NumericValues));
 
-        // Build result string
+        // Build result string using dot as decimal separator
         ResultStr := '';
         for I := 0 to High(NumericValues) do
         begin
           if I > 0 then
             ResultStr := ResultStr + ',';
-          ResultStr := ResultStr + FloatToStr(NumericValues[I]);
+          // Use Format with LocalFS, then ensure dot is used as decimal separator
+          ResultStr := ResultStr + StringReplace(Format('%g', [NumericValues[I]], LocalFS), ',', '.', [rfReplaceAll]);
         end;
       end
       else
@@ -296,19 +325,8 @@ begin
           StringValues[I] := VarToStr(Args[I]);
         end;
 
-        // Simple bubble sort for string values
-        for I := 0 to High(StringValues) - 1 do
-        begin
-          for J := 0 to High(StringValues) - I - 1 do
-          begin
-            if StringValues[J] > StringValues[J + 1] then
-            begin
-              TempStr := StringValues[J];
-              StringValues[J] := StringValues[J + 1];
-              StringValues[J + 1] := TempStr;
-            end;
-          end;
-        end;
+        // QuickSort for string values
+        QuickSortString(StringValues, 0, High(StringValues));
 
         // Build result string
         ResultStr := '';
@@ -588,6 +606,72 @@ begin
   inherited;
 end;
 
+procedure TExprEvaluator.ValidateArgCount(const FuncName: string; Expected, Actual: Integer);
+begin
+  if Expected <> Actual then
+    raise Exception.CreateFmt('%s requires %d argument(s), got %d', [FuncName, Expected, Actual]);
+end;
+
+procedure TExprEvaluator.ValidateNumeric(const FuncName: string; const Arg: Variant);
+begin
+  if not VarIsNumeric(Arg) then
+    raise Exception.CreateFmt('%s requires numeric argument', [FuncName]);
+end;
+
+procedure TExprEvaluator.QuickSortNumeric(var Arr: TArray<Double>; Low, High: Integer);
+var
+  I, J: Integer;
+  Pivot, Temp: Double;
+begin
+  if Low < High then
+  begin
+    Pivot := Arr[(Low + High) div 2];
+    I := Low;
+    J := High;
+    repeat
+      while Arr[I] < Pivot do Inc(I);
+      while Arr[J] > Pivot do Dec(J);
+      if I <= J then
+      begin
+        Temp := Arr[I];
+        Arr[I] := Arr[J];
+        Arr[J] := Temp;
+        Inc(I);
+        Dec(J);
+      end;
+    until I > J;
+    QuickSortNumeric(Arr, Low, J);
+    QuickSortNumeric(Arr, I, High);
+  end;
+end;
+
+procedure TExprEvaluator.QuickSortString(var Arr: TArray<string>; Low, High: Integer);
+var
+  I, J: Integer;
+  Pivot, Temp: string;
+begin
+  if Low < High then
+  begin
+    Pivot := Arr[(Low + High) div 2];
+    I := Low;
+    J := High;
+    repeat
+      while Arr[I] < Pivot do Inc(I);
+      while Arr[J] > Pivot do Dec(J);
+      if I <= J then
+      begin
+        Temp := Arr[I];
+        Arr[I] := Arr[J];
+        Arr[J] := Temp;
+        Inc(I);
+        Dec(J);
+      end;
+    until I > J;
+    QuickSortString(Arr, Low, J);
+    QuickSortString(Arr, I, High);
+  end;
+end;
+
 procedure TExprEvaluator.RegisterFunction(const Name: string; Handler: TFuncHandler);
 begin
   FFunctions.AddOrSetValue(UpperCase(Name), Handler);
@@ -600,7 +684,7 @@ var
   OldInput: string;
   OldPos: Integer;
 begin
-  // Salviamo lo stato attuale
+  // Save current state
   OldInput := FInput;
   OldPos := FPos;
 
@@ -614,7 +698,7 @@ begin
     Result := ParseAssignment;
   end;
 
-  // Ripristiniamo lo stato originale
+  // Restore original state
   FInput := OldInput;
   FPos := OldPos;
 end;
@@ -827,7 +911,7 @@ begin
   else if IsDigit(CurrentChar) then
   begin
     NumStr := ParseNumber;
-    Result := StrToFloat(NumStr, System.SysUtils.FormatSettings);
+    Result := StrToFloat(NumStr, FFormatSettings);
   end
   else if CurrentChar = '-' then
   begin
@@ -836,13 +920,18 @@ begin
     if IsDigit(CurrentChar) then
     begin
       NumStr := ParseNumber;
-      Result := -StrToFloat(NumStr, System.SysUtils.FormatSettings);
+      Result := -StrToFloat(NumStr, FFormatSettings);
     end
     else
     begin
       // This is a unary minus on an expression, parse the expression and negate it
       Result := -ParsePrimary;
     end;
+  end
+  else if IsAlpha(CurrentChar) and ConsumeKeyword('NOT') then
+  begin
+    SkipWhitespace;
+    Result := not ParsePrimary;
   end
   else if IsAlpha(CurrentChar) then
   begin
