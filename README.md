@@ -12,8 +12,8 @@ A powerful, flexible, and modern mathematical expression evaluator written in Ob
 ### 🔢 **Mathematical Operations**
 - **Arithmetic**: `+`, `-`, `*`, `/`, `^` (power), `mod`, `div` (integer division)
 - **Negative Numbers**: Full support for negative literals and unary minus (`-5`, `-(x + y)`)
-- **Advanced Math Functions**: `sqrt()`, `log()` (base 10), `logn()` (natural log), `round()`
-- **Aggregation Functions**: `Min()`, `Max()` (2+ numeric arguments), `Sort()` (2+ homogeneous arguments)
+- **Advanced Math Functions**: `sqrt()`, `log()` (base 10), `logn()` (natural log), `round()`, `abs()`, `floor()`, `ceil()`, `power()`
+- **Aggregation Functions**: `Min()`, `Max()` (2+ numeric arguments), `Sort()` (2+ homogeneous arguments with QuickSort O(n log n))
 - **Operator Precedence**: Fully compliant with mathematical precedence rules
 - **Parentheses Support**: Nested expressions with proper grouping
 
@@ -38,7 +38,8 @@ A powerful, flexible, and modern mathematical expression evaluator written in Ob
   ```
 
 ### 🧠 **Logical Operations**
-- **Boolean Logic**: `and`, `or`, `xor` (left-to-right evaluation)
+- **Boolean Logic**: `and`, `or`, `xor`, `not` (proper precedence and left-to-right evaluation)
+- **Unary Negation**: `not` operator for boolean negation (`not true`, `not (x > 5)`)
 - **Comparisons**: `=`, `<>`, `<`, `<=`, `>`, `>=`
 - **Boolean Constants**: `true`, `false` (case-insensitive)
 - **Complex Conditions**: Nested logical expressions with proper precedence
@@ -162,6 +163,11 @@ var
 begin
   Eval := CreateExprEvaluator;
 
+  // New math functions
+  Result := Eval.Evaluate('abs(-15.5)'); // Absolute value: 15.5
+  Result := Eval.Evaluate('floor(3.7) + ceil(2.3)'); // 3 + 3 = 6
+  Result := Eval.Evaluate('power(2, 10)'); // 1024
+
   // Complex mathematical expression with negative numbers
   Result := Eval.Evaluate('sqrt(16) + log(100) * 2^3 - (-5)'); // Returns 25
   Result := Eval.Evaluate('10 div 3 + 15 mod 4'); // Returns 6
@@ -170,7 +176,7 @@ begin
   Eval.SetVar('pi', ToFloat('3.14159'));
   Eval.SetVar('radius', 5);
   Result := Eval.Evaluate('pi * radius^2'); // Area calculation
-  Result := Eval.Evaluate('Min(abs_error1, abs_error2, abs_error3)'); // Find minimum error
+  Result := Eval.Evaluate('Min(abs(error1), abs(error2), abs(error3))'); // Find minimum absolute error
 end;
 ```
 
@@ -199,6 +205,10 @@ var
   Eval: IExprEvaluator;
 begin
   Eval := CreateExprEvaluator;
+
+  // Complex boolean logic with NOT operator
+  Result := Eval.Evaluate('not (x > 10) and y < 5'); // NOT operator with precedence
+  Result := Eval.Evaluate('not false or not true'); // Multiple NOT operators
 
   // Complex boolean logic with aggregation
   Result := Eval.Evaluate('(ToInteger("1") = 1 and ToFloat("2.0") = 2.0) or false');
@@ -278,6 +288,10 @@ end;
 | `log(x)` | Logarithm base 10 | `log(100)` → `2` |
 | `logn(x)` | Natural logarithm | `logn(2.71828)` → `≈1` |
 | `round(x, digits)` | Round to specified digits | `round(3.14159, 2)` → `3.14` |
+| `abs(x)` | Absolute value | `abs(-5)` → `5` |
+| `floor(x)` | Floor function (round down) | `floor(3.7)` → `3` |
+| `ceil(x)` | Ceiling function (round up) | `ceil(3.2)` → `4` |
+| `power(x, y)` | Power function (x^y) | `power(2, 3)` → `8` |
 | `Min(x, y, ...)` | Minimum of 2+ numbers | `Min(5, 3, 8)` → `3` |
 | `Max(x, y, ...)` | Maximum of 2+ numbers | `Max(5, 3, 8)` → `8` |
 
@@ -288,7 +302,7 @@ end;
 | `ToInteger(s)` | Convert string to integer | `ToInteger("-123")` → `-123` |
 | `ToFloat(s)` | Convert string to float | `ToFloat("-3.14")` → `-3.14` |
 | `contains(needle, haystack)` | Check if string contains substring | `contains("test", "testing")` → `True` |
-| `Sort(x, y, ...)` | Sort 2+ homogeneous values | `Sort(5, 1, 3)` → `"1,3,5"` |
+| `Sort(x, y, ...)` | Sort 2+ homogeneous values (QuickSort) | `Sort(5, 1, 3)` → `"1,3,5"` |
 
 ### Operators
 | Category | Operators | Precedence | Notes |
@@ -300,7 +314,7 @@ end;
 | Comparison | `=`, `<>`, `<`, `<=`, `>`, `>=` | | String and numeric comparison |
 | Addition | `+`, `-` | | String concatenation with `+` |
 | Multiplication | `*`, `/`, `mod`, `div` | | Integer division with `div` |
-| Unary | `-` | | Unary minus for negative numbers |
+| Unary | `-`, `not` | | Unary minus and boolean negation |
 | Exponentiation | `^` | | Power operator |
 | Parentheses | `()` | Highest | Grouping and function calls |
 

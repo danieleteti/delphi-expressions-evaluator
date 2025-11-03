@@ -311,8 +311,8 @@ begin
         begin
           if I > 0 then
             ResultStr := ResultStr + ',';
-          // Use Format with LocalFS, then ensure dot is used as decimal separator
-          ResultStr := ResultStr + StringReplace(Format('%g', [NumericValues[I]], LocalFS), ',', '.', [rfReplaceAll]);
+          // Use FloatToStrF with LocalFS to ensure consistent decimal separator
+          ResultStr := ResultStr + FloatToStrF(NumericValues[I], ffGeneral, 15, 0, LocalFS);
         end;
       end
       else
