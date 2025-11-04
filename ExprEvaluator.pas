@@ -26,6 +26,8 @@ unit ExprEvaluator;
 
 interface
 
+{$I dmvcframework.inc}
+
 uses
   System.SysUtils, System.Variants, System.Math, System.Generics.Collections;
 
@@ -56,6 +58,11 @@ type
     /// Get a variable value
     /// </summary>
     function GetVar(const Name: string): Variant;
+
+    /// <summary>
+    /// Convert a Variant to string using consistent format settings (dot as decimal separator)
+    /// </summary>
+    function VariantToString(const Value: Variant): string;
   end;
 
   TExprEvaluator = class(TInterfacedObject, IExprEvaluator)
@@ -100,6 +107,7 @@ type
     function Evaluate(const Expr: string): Variant;
     procedure SetVar(const Name: string; Value: Variant);
     function GetVar(const Name: string): Variant;
+    function VariantToString(const Value: Variant): string;
   end;
 
 /// <summary>
@@ -200,7 +208,11 @@ begin
         raise Exception.Create('Contains requires 2 arguments');
       if VarIsNull(Args[0]) or VarIsNull(Args[1]) then
         raise Exception.Create('Contains requires non-null arguments');
+      {$IF Defined(FLORENCEORBETTER)}
       Result := String(Args[1]).Contains(String(Args[0]), True);
+      {$ELSE}
+      Result := String(Args[1]).ToLower.Contains(String(Args[0]).ToLower);
+      {$ENDIF}
     end);
 
   RegisterFunction('ToString', function(const Args: array of Variant): Variant
@@ -1214,6 +1226,27 @@ end;
 function TExprEvaluator.GetVar(const Name: string): Variant;
 begin
   Result := GetVariable(Name);
+end;
+
+function TExprEvaluator.VariantToString(const Value: Variant): string;
+begin
+  // Convert Variant to string using FFormatSettings to ensure dot as decimal separator
+  case VarType(Value) of
+    varSmallint, varInteger, varByte, varShortInt, varWord, varLongWord, varInt64, varUInt64:
+      Result := IntToStr(Value);
+    varSingle, varDouble, varCurrency:
+      Result := FloatToStr(Double(Value), FFormatSettings);
+    varBoolean:
+      if Value then
+        Result := 'True'
+      else
+        Result := 'False';
+    varString, varUString, varOleStr:
+      Result := VarToStr(Value);
+  else
+    // For other types, use standard VarToStr
+    Result := VarToStr(Value);
+  end;
 end;
 
 function TExprEvaluator.IsKeywordAtPosition(const Keyword: string): Boolean;
