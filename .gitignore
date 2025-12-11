@@ -6,3 +6,5 @@
 */__history/
 /CLAUDE.md
 /unittest/dunitx-results.xml
+/unittest/Win32/
+/sample/REPL/__recovery/
