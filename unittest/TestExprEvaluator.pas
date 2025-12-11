@@ -62,6 +62,10 @@ type
     [Test] procedure TestDateFunctions;
     [Test] procedure TestComments;
     [Test] procedure TestDivisionByZero;
+
+    // Short-circuit evaluation and LIKE operator tests
+    [Test] procedure TestShortCircuitEvaluation;
+    [Test] procedure TestLikeOperator;
   end;
 
 implementation
@@ -314,7 +318,12 @@ procedure TExprEvaluatorTests.TestBooleanLogicEdgeCases;
 begin
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('true and true and true'));
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('false or false or true'));
+  // AND and OR have same precedence (left-to-right evaluation)
+  // 'true or false and false' = '((true or false) and false)' = False
   Assert.AreEqual<Boolean>(False, FEval.Evaluate('true or false and false'));
+  // Use parentheses for explicit precedence
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('(true or false) and false'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('true or (false and false)'));
 end;
 
 procedure TExprEvaluatorTests.TestVariableEdgeCases;
@@ -449,6 +458,172 @@ begin
     begin
       FEval.Evaluate('10 div 0');
     end);
+end;
+
+// 35. TestShortCircuitEvaluation
+// Tests TRUE short-circuit behavior: right side should NOT be evaluated when result is determined
+procedure TExprEvaluatorTests.TestShortCircuitEvaluation;
+var
+  CallCount: Integer;
+begin
+  // Register a function that tracks calls and has a side effect
+  CallCount := 0;
+  FEval.RegisterFunction('SideEffect', function(const Args: array of Variant): Variant
+    begin
+      Inc(CallCount);
+      Result := True;
+    end);
+
+  // ========== AND SHORT-CIRCUIT TESTS ==========
+  // false AND x -> should return false WITHOUT evaluating x
+
+  CallCount := 0;
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('false and SideEffect()'));
+  Assert.AreEqual<Integer>(0, CallCount, 'AND short-circuit FAILED: SideEffect was called when left=false');
+
+  // true AND x -> MUST evaluate x
+  CallCount := 0;
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('true and SideEffect()'));
+  Assert.AreEqual<Integer>(1, CallCount, 'AND normal: SideEffect should be called when left=true');
+
+  // ========== OR SHORT-CIRCUIT TESTS ==========
+  // true OR x -> should return true WITHOUT evaluating x
+
+  CallCount := 0;
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('true or SideEffect()'));
+  Assert.AreEqual<Integer>(0, CallCount, 'OR short-circuit FAILED: SideEffect was called when left=true');
+
+  // false OR x -> MUST evaluate x
+  CallCount := 0;
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('false or SideEffect()'));
+  Assert.AreEqual<Integer>(1, CallCount, 'OR normal: SideEffect should be called when left=false');
+
+  // ========== CHAINED SHORT-CIRCUIT TESTS ==========
+  // false AND x AND y -> should not evaluate x or y
+  CallCount := 0;
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('false and SideEffect() and SideEffect()'));
+  Assert.AreEqual<Integer>(0, CallCount, 'Chained AND short-circuit failed');
+
+  // true OR x OR y -> should not evaluate x or y
+  CallCount := 0;
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('true or SideEffect() or SideEffect()'));
+  Assert.AreEqual<Integer>(0, CallCount, 'Chained OR short-circuit failed');
+
+  // ========== MIXED OPERATORS (left-to-right) ==========
+  // (false AND SideEffect()) OR true -> false OR true = true, SideEffect should NOT be called
+  CallCount := 0;
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('false and SideEffect() or true'));
+  Assert.AreEqual<Integer>(0, CallCount, 'Mixed AND-OR: SideEffect should not be called');
+
+  // (true OR SideEffect()) AND false -> true AND false = false
+  // SideEffect is NOT called due to OR short-circuit, but result is false due to AND
+  CallCount := 0;
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('true or SideEffect() and false'));
+  Assert.AreEqual<Integer>(0, CallCount, 'Mixed OR-AND: SideEffect should not be called due to OR short-circuit');
+end;
+
+// 36. TestLikeOperator - Comprehensive pattern matching tests
+procedure TExprEvaluatorTests.TestLikeOperator;
+begin
+  // ========== BASIC * WILDCARD (matches zero or more characters) ==========
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "hel*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "*llo"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "*ell*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "hello"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"hello" like "world"'));
+
+  // * matches zero characters
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "hello*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "*hello"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "*hello*"'));
+
+  // * at beginning, middle, and end
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"abcdef" like "a*f"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"abcdef" like "*bcde*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"abcdef" like "a*c*f"'));
+
+  // Multiple * wildcards
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test_file_name.txt" like "*_*_*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"a.b.c.d" like "*.*.*.*"'));
+
+  // ========== ? WILDCARD (matches exactly one character) ==========
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "h?llo"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "hell?"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "?ello"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello" like "?????"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"hello" like "h?lo"'));  // missing char
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"hello" like "??????"'));  // too many ?
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"hello" like "????"'));   // too few ?
+
+  // ========== COMBINED * AND ? ==========
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test123.txt" like "test???.txt"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"file1.txt" like "file?.t*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"document_v2.pdf" like "doc*_v?.pdf"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"test12.txt" like "test???.txt"'));  // only 2 chars, need 3
+
+  // ========== FILE PATTERN MATCHING ==========
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test.txt" like "*.txt"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"document.pdf" like "*.pdf"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"image.jpg" like "*.jp*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"archive.tar.gz" like "*.tar.gz"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"config.json" like "config.*"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"image.jpg" like "*.png"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"test.txt" like "*.doc"'));
+
+  // ========== CASE SENSITIVITY (TMask is case-insensitive on Windows) ==========
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"HELLO" like "hello"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"Hello" like "HELLO"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"HeLLo" like "hEllO"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"TEST.TXT" like "*.txt"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test.TXT" like "*.TXT"'));
+
+  // ========== EDGE CASES ==========
+  // Empty strings
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"" like ""'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"" like "*"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"" like "?"'));  // ? requires exactly 1 char
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"a" like ""'));
+
+  // Single character strings
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"a" like "a"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"a" like "?"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"a" like "*"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"a" like "b"'));
+
+  // Long strings
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"abcdefghijklmnopqrstuvwxyz" like "abc*xyz"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"abcdefghijklmnopqrstuvwxyz" like "*mnop*"'));
+
+  // Special characters in strings (not pattern chars)
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello world" like "hello*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello-world" like "hello-*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"hello_world" like "*_*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"user@email.com" like "*@*.com"'));
+
+  // ========== LIKE WITH VARIABLES ==========
+  FEval.SetVar('filename', 'report_2024.xlsx');
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('filename like "*.xlsx"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('filename like "report_????.xlsx"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('filename like "*_*.*"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('filename like "*.docx"'));
+
+  FEval.SetVar('email', 'user@domain.com');
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('email like "*@*"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('email like "*@*.com"'));
+
+  // ========== LIKE WITH EXPRESSIONS ==========
+  FEval.SetVar('prefix', 'test');
+  FEval.SetVar('ext', '.txt');
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test_file.txt" like "test*"'));
+
+  // ========== LIKE IN CONDITIONALS ==========
+  Assert.AreEqual<string>('match', FEval.Evaluate('if "hello.txt" like "*.txt" then "match" else "no match"'));
+  Assert.AreEqual<string>('no match', FEval.Evaluate('if "hello.txt" like "*.pdf" then "match" else "no match"'));
+
+  // ========== LIKE COMBINED WITH OTHER OPERATORS ==========
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test.txt" like "*.txt" and "file.pdf" like "*.pdf"'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test.txt" like "*.txt" or "file.txt" like "*.doc"'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('"test.txt" like "*.doc" and "file.pdf" like "*.pdf"'));
 end;
 
 initialization

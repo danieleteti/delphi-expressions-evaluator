@@ -29,7 +29,8 @@ interface
 {$I dmvcframework.inc}
 
 uses
-  System.SysUtils, System.Variants, System.Math, System.Generics.Collections;
+  System.SysUtils, System.Variants, System.Math, System.Generics.Collections,
+  System.Masks;
 
 type
   TFuncHandler = reference to function(const Args: array of Variant): Variant;
@@ -72,6 +73,7 @@ type
     FInput: string;
     FPos: Integer;
     FFormatSettings: TFormatSettings;
+    FSkipEvaluation: Boolean;  // When true, parse but don't execute functions
 
     function ParseIfExpression: Variant;
     function ParseLogical: Variant;
@@ -129,6 +131,7 @@ begin
   inherited;
   FFunctions := TDictionary<string, TFuncHandler>.Create;
   FVariables := TDictionary<string, Variant>.Create;
+  FSkipEvaluation := False;
 
   // Create local FormatSettings with dot as decimal separator
   FFormatSettings := TFormatSettings.Create('en-US');
@@ -932,18 +935,33 @@ begin
     if IsDigit(CurrentChar) then
     begin
       NumStr := ParseNumber;
-      Result := -StrToFloat(NumStr, FFormatSettings);
+      if not FSkipEvaluation then
+        Result := -StrToFloat(NumStr, FFormatSettings)
+      else
+        Result := 0;
     end
     else
     begin
       // This is a unary minus on an expression, parse the expression and negate it
-      Result := -ParsePrimary;
+      if not FSkipEvaluation then
+        Result := -ParsePrimary
+      else
+      begin
+        ParsePrimary;  // Parse but discard
+        Result := 0;
+      end;
     end;
   end
   else if IsAlpha(CurrentChar) and ConsumeKeyword('NOT') then
   begin
     SkipWhitespace;
-    Result := not ParsePrimary;
+    if not FSkipEvaluation then
+      Result := not ParsePrimary
+    else
+    begin
+      ParsePrimary;  // Parse but discard
+      Result := False;
+    end;
   end
   else if IsAlpha(CurrentChar) then
   begin
@@ -988,7 +1006,8 @@ var
   Right: Variant;
 begin
   Left := ParsePrimary;
-  if VarIsEmpty(Left) or VarIsNull(Left) then
+  // Allow Null values only in skip mode (for short-circuit evaluation)
+  if (VarIsEmpty(Left) or VarIsNull(Left)) and not FSkipEvaluation then
     raise Exception.Create('Expected expression');
 
   SkipWhitespace;
@@ -996,10 +1015,11 @@ begin
   begin
     NextChar; // skip ^
     Right := ParsePrimary;
-    if VarIsEmpty(Right) or VarIsNull(Right) then
+    if (VarIsEmpty(Right) or VarIsNull(Right)) and not FSkipEvaluation then
       raise Exception.Create('Expected expression after ^');
 
-    Left := System.Math.Power(Left, Right);
+    if not FSkipEvaluation then
+      Left := System.Math.Power(Left, Right);
     SkipWhitespace;
   end;
   Result := Left;
@@ -1022,7 +1042,8 @@ begin
       begin
         SkipWhitespace;
         Right := ParseFactor;
-        Left := Trunc(Left) mod Trunc(Right);
+        if not FSkipEvaluation then
+          Left := Trunc(Left) mod Trunc(Right);
       end
       else
         Break;
@@ -1033,7 +1054,8 @@ begin
       begin
         SkipWhitespace;
         Right := ParseFactor;
-        Left := Trunc(Left) div Trunc(Right);
+        if not FSkipEvaluation then
+          Left := Trunc(Left) div Trunc(Right);
       end
       else
         Break;
@@ -1044,14 +1066,17 @@ begin
       NextChar;
       Right := ParseFactor;
 
-      case Op of
-        '*': Left := Left * Right;
-        '/':
-          begin
-            if Right = 0 then
-              raise Exception.Create('Division by zero');
-            Left := Left / Right;
-          end;
+      if not FSkipEvaluation then
+      begin
+        case Op of
+          '*': Left := Left * Right;
+          '/':
+            begin
+              if Right = 0 then
+                raise Exception.Create('Division by zero');
+              Left := Left / Right;
+            end;
+        end;
       end;
     end;
     SkipWhitespace;
@@ -1075,15 +1100,18 @@ begin
     NextChar;
     Right := ParseMultiplicative;
 
-    case Op of
-      '+':
-        begin
-          if VarIsStr(Left) or VarIsStr(Right) then
-            Left := VarToStr(Left) + VarToStr(Right)
-          else
-            Left := Left + Right;
-        end;
-      '-': Left := Left - Right;
+    if not FSkipEvaluation then
+    begin
+      case Op of
+        '+':
+          begin
+            if VarIsStr(Left) or VarIsStr(Right) then
+              Left := VarToStr(Left) + VarToStr(Right)
+            else
+              Left := Left + Right;
+          end;
+        '-': Left := Left - Right;
+      end;
     end;
     SkipWhitespace;
   end;
@@ -1099,14 +1127,17 @@ begin
   Left := ParseAdditive;
   SkipWhitespace;
 
-  // Handle comparison operators
+  // Handle comparison operators and LIKE
   if CharInSet(CurrentChar, ['<', '>', '=']) then
   begin
     if CurrentChar = '=' then
     begin
       NextChar;
       Right := ParseAdditive;
-      Result := Left = Right;
+      if not FSkipEvaluation then
+        Result := Left = Right
+      else
+        Result := False;
     end
     else if CurrentChar = '<' then
     begin
@@ -1115,18 +1146,27 @@ begin
       begin
         NextChar;
         Right := ParseAdditive;
-        Result := Left <> Right;
+        if not FSkipEvaluation then
+          Result := Left <> Right
+        else
+          Result := False;
       end
       else if CurrentChar = '=' then
       begin
         NextChar;
         Right := ParseAdditive;
-        Result := Left <= Right;
+        if not FSkipEvaluation then
+          Result := Left <= Right
+        else
+          Result := False;
       end
       else
       begin
         Right := ParseAdditive;
-        Result := Left < Right;
+        if not FSkipEvaluation then
+          Result := Left < Right
+        else
+          Result := False;
       end;
     end
     else if CurrentChar = '>' then
@@ -1136,14 +1176,30 @@ begin
       begin
         NextChar;
         Right := ParseAdditive;
-        Result := Left >= Right;
+        if not FSkipEvaluation then
+          Result := Left >= Right
+        else
+          Result := False;
       end
       else
       begin
         Right := ParseAdditive;
-        Result := Left > Right;
+        if not FSkipEvaluation then
+          Result := Left > Right
+        else
+          Result := False;
       end;
     end;
+  end
+  else if ConsumeKeyword('LIKE') then
+  begin
+    // LIKE operator for pattern matching
+    SkipWhitespace;
+    Right := ParseAdditive;
+    if not FSkipEvaluation then
+      Result := MatchesMask(VarToStr(Left), VarToStr(Right))
+    else
+      Result := False;
   end
   else
     Result := Left;
@@ -1153,32 +1209,78 @@ function TExprEvaluator.ParseLogical: Variant;
 var
   Left: Variant;
   Right: Variant;
+  LeftBool: Boolean;
+  OldSkip: Boolean;
 begin
   Left := ParseRelational;
   SkipWhitespace;
 
-  // Handle logical operators
+  // Handle logical operators with short-circuit evaluation
   while True do
   begin
     if ConsumeKeyword('AND') then
     begin
       SkipWhitespace;
-      Right := ParseRelational;
-      Left := Left and Right;
+      // Short-circuit: if Left is False, skip Right evaluation
+      if VarIsType(Left, varBoolean) and not FSkipEvaluation then
+      begin
+        LeftBool := Left;
+        if not LeftBool then
+        begin
+          // Enable skip mode to parse but not execute
+          OldSkip := FSkipEvaluation;
+          FSkipEvaluation := True;
+          try
+            ParseRelational;  // Parse to consume tokens, but don't execute
+          finally
+            FSkipEvaluation := OldSkip;
+          end;
+          Left := False;  // Short-circuit result
+        end
+        else
+        begin
+          Right := ParseRelational;
+          Left := LeftBool and Boolean(Right);
+        end;
+      end
+      else
+        Left := Left and ParseRelational;
       SkipWhitespace;
     end
     else if ConsumeKeyword('OR') then
     begin
       SkipWhitespace;
-      Right := ParseRelational;
-      Left := Left or Right;
+      // Short-circuit: if Left is True, skip Right evaluation
+      if VarIsType(Left, varBoolean) and not FSkipEvaluation then
+      begin
+        LeftBool := Left;
+        if LeftBool then
+        begin
+          // Enable skip mode to parse but not execute
+          OldSkip := FSkipEvaluation;
+          FSkipEvaluation := True;
+          try
+            ParseRelational;  // Parse to consume tokens, but don't execute
+          finally
+            FSkipEvaluation := OldSkip;
+          end;
+          Left := True;  // Short-circuit result
+        end
+        else
+        begin
+          Right := ParseRelational;
+          Left := LeftBool or Boolean(Right);
+        end;
+      end
+      else
+        Left := Left or ParseRelational;
       SkipWhitespace;
     end
     else if ConsumeKeyword('XOR') then
     begin
       SkipWhitespace;
-      Right := ParseRelational;
-      Left := Left xor Right;
+      // XOR cannot be short-circuited - both sides must be evaluated
+      Left := Left xor ParseRelational;
       SkipWhitespace;
     end
     else
@@ -1193,6 +1295,13 @@ function TExprEvaluator.CallFunction(const FuncName: string; Args: TArray<Varian
 var
   Handler: TFuncHandler;
 begin
+  // In skip mode, return a dummy value without calling the function
+  if FSkipEvaluation then
+  begin
+    Result := Null;
+    Exit;
+  end;
+
   if not FFunctions.TryGetValue(FuncName, Handler) then
     raise Exception.Create('Unknown function: ' + FuncName);
   Result := Handler(Args);
