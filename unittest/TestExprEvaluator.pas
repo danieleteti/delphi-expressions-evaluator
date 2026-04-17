@@ -8,6 +8,7 @@ uses
   System.Math,
   System.Variants,
   System.DateUtils,
+  System.Generics.Collections,
   ExprEvaluator;
 
 type
@@ -66,6 +67,12 @@ type
     // Short-circuit evaluation and LIKE operator tests
     [Test] procedure TestShortCircuitEvaluation;
     [Test] procedure TestLikeOperator;
+
+    // External variable resolver tests
+    [Test] procedure TestExternalVariableResolver;
+
+    // Strict parse: trailing/unsupported tokens must raise (not silently ignore)
+    [Test] procedure TestTrailingUnconsumedCharactersRaises;
   end;
 
 implementation
@@ -232,7 +239,15 @@ end;
 procedure TExprEvaluatorTests.TestEdgeCases;
 begin
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('true and true'));
-  Assert.AreEqual<Integer>(1, FEval.Evaluate('1or1')); // Expression stops at invalid character
+  // '1or1' has no whitespace before 'or': the tokenizer treats 'or1' as an
+  // identifier, so the expression is malformed. Strict parse rejects it now
+  // (previously it silently returned the partial left-hand value).
+  Assert.WillRaise(
+    procedure
+    begin
+      FEval.Evaluate('1or1');
+    end,
+    Exception);
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('true AND true'));
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('true and true'));
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('true And true'));
@@ -624,6 +639,95 @@ begin
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test.txt" like "*.txt" and "file.pdf" like "*.pdf"'));
   Assert.AreEqual<Boolean>(True, FEval.Evaluate('"test.txt" like "*.txt" or "file.txt" like "*.doc"'));
   Assert.AreEqual<Boolean>(False, FEval.Evaluate('"test.txt" like "*.doc" and "file.pdf" like "*.pdf"'));
+end;
+
+// 37. TestExternalVariableResolver
+procedure TExprEvaluatorTests.TestExternalVariableResolver;
+var
+  ExternalVars: TDictionary<string, Variant>;
+begin
+  ExternalVars := TDictionary<string, Variant>.Create;
+  try
+    // Setup external variables
+    ExternalVars.Add('PRICE', 100);
+    ExternalVars.Add('QTY', 5);
+    ExternalVars.Add('NAME', 'John');
+    ExternalVars.Add('DISCOUNT', 0.1);
+
+    // Set the external resolver
+    FEval.SetOnResolveExternalVariable(
+      function(const VarName: string; out Value: Variant): Boolean
+      begin
+        Result := ExternalVars.TryGetValue(UpperCase(VarName), Value);
+      end);
+
+    // ========== BASIC EXTERNAL VARIABLE ACCESS ==========
+    Assert.AreEqual<Double>(100, FEval.Evaluate('price'));
+    Assert.AreEqual<Integer>(5, FEval.Evaluate('qty'));
+    Assert.AreEqual<string>('John', FEval.Evaluate('name'));
+
+    // ========== EXTERNAL VARIABLES IN EXPRESSIONS ==========
+    Assert.AreEqual<Double>(500, FEval.Evaluate('price * qty'));
+    Assert.AreEqual<Double>(450, FEval.Evaluate('price * qty * (1 - discount)'));
+
+    // ========== EXTERNAL VARIABLES WITH FUNCTIONS ==========
+    Assert.AreEqual<Double>(4, FEval.Evaluate('Length(name)'));
+    Assert.AreEqual<string>('JOHN', FEval.Evaluate('Upper(name)'));
+
+    // ========== EXTERNAL VARIABLES IN CONDITIONALS ==========
+    Assert.AreEqual<string>('expensive', FEval.Evaluate('if price > 50 then "expensive" else "cheap"'));
+    Assert.AreEqual<string>('large order', FEval.Evaluate('if qty >= 5 then "large order" else "small order"'));
+
+    // ========== MIXED INTERNAL AND EXTERNAL VARIABLES ==========
+    FEval.SetVar('tax', 0.2);
+    Assert.AreEqual<Double>(600, FEval.Evaluate('price * qty * (1 + tax)'));
+
+    // ========== UNKNOWN VARIABLE ERROR ==========
+    Assert.WillRaise(
+      procedure
+      begin
+        FEval.Evaluate('unknown_var * 2');
+      end,
+      Exception);
+
+  finally
+    ExternalVars.Free;
+  end;
+end;
+
+procedure TExprEvaluatorTests.TestTrailingUnconsumedCharactersRaises;
+begin
+  // Pipe-filter syntax is not part of ExprEvaluator — must not be silently accepted.
+  // Root cause of a silent bug in TemplatePro-based code generation:
+  // @(program_type|eq,"isapi") parsed only "program_type", returning its (truthy)
+  // string value instead of a boolean comparison.
+  Assert.WillRaise(
+    procedure
+    begin
+      FEval.Evaluate('program_type|eq,"isapi"');
+    end,
+    Exception);
+
+  // Bare trailing identifier
+  Assert.WillRaise(
+    procedure
+    begin
+      FEval.Evaluate('1 + 2 foo');
+    end,
+    Exception);
+
+  // Unknown operator character
+  Assert.WillRaise(
+    procedure
+    begin
+      FEval.Evaluate('1 + 2 @ 3');
+    end,
+    Exception);
+
+  // Valid expressions with trailing whitespace/comments must still pass
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('1 + 2   '));
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('1 + 2 // trailing comment'));
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('1 + 2 {block comment}'));
 end;
 
 initialization

@@ -34,6 +34,7 @@ uses
 
 type
   TFuncHandler = reference to function(const Args: array of Variant): Variant;
+  TExternalVariableResolver = reference to function(const VarName: string; out Value: Variant): Boolean;
 
   /// <summary>
   /// Interface for expression evaluation without manual memory management
@@ -64,6 +65,12 @@ type
     /// Convert a Variant to string using consistent format settings (dot as decimal separator)
     /// </summary>
     function VariantToString(const Value: Variant): string;
+
+    /// <summary>
+    /// Set a callback to resolve variables from external sources (e.g., template engines).
+    /// The resolver is called when a variable is not found in the internal dictionary.
+    /// </summary>
+    procedure SetOnResolveExternalVariable(const Resolver: TExternalVariableResolver);
   end;
 
   TExprEvaluator = class(TInterfacedObject, IExprEvaluator)
@@ -74,6 +81,7 @@ type
     FPos: Integer;
     FFormatSettings: TFormatSettings;
     FSkipEvaluation: Boolean;  // When true, parse but don't execute functions
+    FOnResolveExternalVariable: TExternalVariableResolver;
 
     function ParseIfExpression: Variant;
     function ParseLogical: Variant;
@@ -110,6 +118,7 @@ type
     procedure SetVar(const Name: string; Value: Variant);
     function GetVar(const Name: string): Variant;
     function VariantToString(const Value: Variant): string;
+    procedure SetOnResolveExternalVariable(const Resolver: TExternalVariableResolver);
   end;
 
 /// <summary>
@@ -132,6 +141,7 @@ begin
   FFunctions := TDictionary<string, TFuncHandler>.Create;
   FVariables := TDictionary<string, Variant>.Create;
   FSkipEvaluation := False;
+  FOnResolveExternalVariable := nil;
 
   // Create local FormatSettings with dot as decimal separator
   FFormatSettings := TFormatSettings.Create('en-US');
@@ -621,6 +631,11 @@ begin
   inherited;
 end;
 
+procedure TExprEvaluator.SetOnResolveExternalVariable(const Resolver: TExternalVariableResolver);
+begin
+  FOnResolveExternalVariable := Resolver;
+end;
+
 procedure TExprEvaluator.ValidateArgCount(const FuncName: string; Expected, Actual: Integer);
 begin
   if Expected <> Actual then
@@ -703,19 +718,29 @@ begin
   OldInput := FInput;
   OldPos := FPos;
 
-  // Split by semicolon to support multiple expressions
-  Exprs := Expr.Split([';']);
-  Result := Unassigned;
-  for I := 0 to High(Exprs) do
-  begin
-    FInput := Trim(Exprs[I]);
-    FPos := 1;
-    Result := ParseAssignment;
+  try
+    // Split by semicolon to support multiple expressions
+    Exprs := Expr.Split([';']);
+    Result := Unassigned;
+    for I := 0 to High(Exprs) do
+    begin
+      FInput := Trim(Exprs[I]);
+      FPos := 1;
+      Result := ParseAssignment;
+      // Strict parse: reject unconsumed trailing tokens so typos like
+      // `var|filter,"x"` or `1 + 2 foo` surface as errors instead of silently
+      // returning the partial left-hand value.
+      SkipWhitespace;
+      if FPos <= Length(FInput) then
+        raise Exception.CreateFmt(
+          'Unexpected characters at position %d: "%s"',
+          [FPos, Copy(FInput, FPos, MaxInt)]);
+    end;
+  finally
+    // Restore original state
+    FInput := OldInput;
+    FPos := OldPos;
   end;
-
-  // Restore original state
-  FInput := OldInput;
-  FPos := OldPos;
 end;
 
 function TExprEvaluator.ParseAssignment: Variant;
@@ -877,7 +902,8 @@ var
   Start: Integer;
 begin
   Start := FPos;
-  while (FPos <= Length(FInput)) and (IsAlpha(CurrentChar) or IsDigit(CurrentChar)) do
+  // Include dots to support member access (e.g., f.Index, obj.property.subprop)
+  while (FPos <= Length(FInput)) and (IsAlpha(CurrentChar) or IsDigit(CurrentChar) or (CurrentChar = '.')) do
     NextChar;
   Result := UpperCase(Copy(FInput, Start, FPos - Start));
 end;
@@ -1318,7 +1344,14 @@ begin
     Result := True
   else if UpperVarName = 'FALSE' then
     Result := False
-  else if not FVariables.TryGetValue(UpperVarName, Result) then
+  else if FVariables.TryGetValue(UpperVarName, Result) then
+    Exit
+  else if Assigned(FOnResolveExternalVariable) then
+  begin
+    if not FOnResolveExternalVariable(VarName, Result) then
+      raise Exception.Create('Unknown variable: ' + VarName);
+  end
+  else
     raise Exception.Create('Unknown variable: ' + VarName);
 end;
 
