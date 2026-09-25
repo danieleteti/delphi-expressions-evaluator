@@ -73,6 +73,8 @@ type
 
     // Strict parse: trailing/unsupported tokens must raise (not silently ignore)
     [Test] procedure TestTrailingUnconsumedCharactersRaises;
+    // Deep nesting must raise a normal exception instead of overflowing the stack
+    [Test] procedure TestNestingDepthLimit;
   end;
 
 implementation
@@ -728,6 +730,41 @@ begin
   Assert.AreEqual<Integer>(3, FEval.Evaluate('1 + 2   '));
   Assert.AreEqual<Integer>(3, FEval.Evaluate('1 + 2 // trailing comment'));
   Assert.AreEqual<Integer>(3, FEval.Evaluate('1 + 2 {block comment}'));
+end;
+
+procedure TExprEvaluatorTests.TestNestingDepthLimit;
+
+  function Nested(const aDepth: Integer; const aOpen, aInner, aClose: string): string;
+  var
+    I: Integer;
+  begin
+    Result := '';
+    for I := 1 to aDepth do
+      Result := Result + aOpen;
+    Result := Result + aInner;
+    for I := 1 to aDepth do
+      Result := Result + aClose;
+  end;
+
+  procedure AssertTooDeep(const aExpr: string);
+  begin
+    Assert.WillRaiseWithMessage(
+      procedure
+      begin
+        FEval.Evaluate(aExpr);
+      end,
+      Exception, 'Expression nesting too deep (max 256 levels)');
+  end;
+
+begin
+  // reasonable nesting keeps working
+  Assert.AreEqual<Integer>(1, FEval.Evaluate(Nested(50, '(', '1', ')')));
+  AssertTooDeep(Nested(100000, '(', '1', ')'));
+  AssertTooDeep(Nested(100000, '-', '1', ''));
+  AssertTooDeep(Nested(100000, 'NOT ', 'true', ''));
+  AssertTooDeep(Nested(100000, 'IF true THEN ', '1', ' ELSE 0'));
+  // the evaluator is still usable after the error
+  Assert.AreEqual<Integer>(2, FEval.Evaluate('1 + 1'));
 end;
 
 initialization
