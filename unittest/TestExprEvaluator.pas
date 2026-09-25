@@ -75,6 +75,10 @@ type
     [Test] procedure TestTrailingUnconsumedCharactersRaises;
     // Deep nesting must raise a normal exception instead of overflowing the stack
     [Test] procedure TestNestingDepthLimit;
+    // IF..THEN..ELSE evaluates only the selected branch
+    [Test] procedure TestIfThenElseShortCircuit;
+    // MOD and DIV by zero raise like '/'
+    [Test] procedure TestModDivByZero;
   end;
 
 implementation
@@ -765,6 +769,55 @@ begin
   AssertTooDeep(Nested(100000, 'IF true THEN ', '1', ' ELSE 0'));
   // the evaluator is still usable after the error
   Assert.AreEqual<Integer>(2, FEval.Evaluate('1 + 1'));
+end;
+
+procedure TExprEvaluatorTests.TestIfThenElseShortCircuit;
+var
+  CallCount: Integer;
+begin
+  CallCount := 0;
+  FEval.RegisterFunction('SideEffect', function(const Args: array of Variant): Variant
+    begin
+      Inc(CallCount);
+      Result := 1;
+    end);
+
+  // the untaken branch is parsed but not evaluated
+  Assert.AreEqual<Integer>(5, FEval.Evaluate('IF 0 > 0 THEN 1/0 ELSE 5'));
+  Assert.AreEqual<Integer>(5, FEval.Evaluate('IF 1 > 0 THEN 5 ELSE 1/0'));
+
+  // a nested IF inside a skipped branch stays skipped in both its branches
+  Assert.AreEqual<Integer>(7, FEval.Evaluate('IF false THEN (IF true THEN 1/0 ELSE 1/0) ELSE 7'));
+  Assert.AreEqual<Integer>(7, FEval.Evaluate('IF true THEN 7 ELSE IF true THEN 1/0 ELSE 1/0'));
+
+  // functions in the untaken branch are not called
+  Assert.AreEqual<Integer>(2, FEval.Evaluate('IF true THEN 2 ELSE SideEffect()'));
+  Assert.AreEqual<Integer>(2, FEval.Evaluate('IF false THEN SideEffect() ELSE 2'));
+  Assert.AreEqual<Integer>(0, CallCount, 'SideEffect was called in the untaken branch');
+
+  // the taken branch still runs
+  Assert.AreEqual<Integer>(1, FEval.Evaluate('IF true THEN SideEffect() ELSE 2'));
+  Assert.AreEqual<Integer>(1, CallCount);
+end;
+
+procedure TExprEvaluatorTests.TestModDivByZero;
+begin
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      FEval.Evaluate('10 MOD 0');
+    end,
+    Exception, 'Division by zero');
+
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      FEval.Evaluate('10 DIV 0');
+    end,
+    Exception, 'Division by zero');
+
+  Assert.AreEqual<Integer>(1, FEval.Evaluate('10 MOD 3'));
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('10 DIV 3'));
 end;
 
 initialization
