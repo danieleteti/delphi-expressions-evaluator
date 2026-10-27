@@ -28,8 +28,6 @@ type
     Success: Boolean;
     Value: Variant;
     ErrorMessage: string;
-    IsAssignment: Boolean;
-    VariableName: string;
   end;
 
   /// <summary>
@@ -40,7 +38,6 @@ type
     FEvaluator: IExprEvaluator;
     FVariables: TDictionary<string, Variant>;
     FHistory: TList<string>;
-    function ExtractAssignmentInfo(const Input: string; out VarName: string): Boolean;
   public
     constructor Create;
     destructor Destroy; override;
@@ -90,19 +87,6 @@ begin
   inherited;
 end;
 
-function TREPLEngine.ExtractAssignmentInfo(const Input: string; out VarName: string): Boolean;
-var
-  AssignPos: Integer;
-begin
-  AssignPos := Pos(':=', Input);
-  Result := AssignPos > 0;
-
-  if Result then
-  begin
-    VarName := UpperCase(Trim(Copy(Input, 1, AssignPos - 1)));
-  end;
-end;
-
 function TREPLEngine.Evaluate(const Expression: string): TEvalResult;
 var
   VarName: string;
@@ -111,30 +95,21 @@ begin
   Result.Success := False;
   Result.Value := Unassigned;
   Result.ErrorMessage := '';
-  Result.IsAssignment := False;
-  Result.VariableName := '';
 
   try
     // Evaluate the expression
     Result.Value := FEvaluator.Evaluate(Expression);
     Result.Success := True;
-
-    // Check if this was an assignment
-    Result.IsAssignment := ExtractAssignmentInfo(Expression, VarName);
-    if Result.IsAssignment then
-    begin
-      Result.VariableName := VarName;
-      // Store variable for tracking
-      FVariables.AddOrSetValue(VarName, Result.Value);
-    end;
-
   except
     on E: Exception do
-    begin
-      Result.Success := False;
       Result.ErrorMessage := E.Message;
-    end;
   end;
+
+  // Mirror what the evaluator really holds, also after a line that failed halfway
+  // ('x := 1; y := 2 +' has already set x)
+  FVariables.Clear;
+  for VarName in FEvaluator.VariableNames do
+    FVariables.Add(VarName, FEvaluator.GetVar(VarName));
 end;
 
 function TREPLEngine.GetVariables: TDictionary<string, Variant>;

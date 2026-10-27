@@ -16,6 +16,7 @@ type
   TExprEvaluatorTests = class
   private
     FEval: IExprEvaluator;
+    procedure AssertRaises(const aExpr: string);
   public
     [Setup]
     procedure Setup;
@@ -79,6 +80,18 @@ type
     [Test] procedure TestIfThenElseShortCircuit;
     // MOD and DIV by zero raise like '/'
     [Test] procedure TestModDivByZero;
+
+    // Regressions
+    [Test] procedure TestRoundFollowsDelphiRoundTo;
+    [Test] procedure TestSemicolonInStringAndComment;
+    [Test] procedure TestKeywordFollowedByPunctuation;
+    [Test] procedure TestNumberToStringUsesDot;
+    [Test] procedure TestShortCircuitSkipsVariableLookup;
+    [Test] procedure TestNonFiniteResultRaises;
+    [Test] procedure TestIdentifierCaseKeptForResolver;
+    [Test] procedure TestDateErrors;
+    [Test] procedure TestArgumentValidationMessages;
+    [Test] procedure TestVariableNames;
   end;
 
 implementation
@@ -93,6 +106,16 @@ end;
 procedure TExprEvaluatorTests.TearDown;
 begin
   FEval := nil;
+end;
+
+procedure TExprEvaluatorTests.AssertRaises(const aExpr: string);
+begin
+  Assert.WillRaise(
+    procedure
+    begin
+      FEval.Evaluate(aExpr);
+    end,
+    Exception, aExpr);
 end;
 
 // 1. TestBasicArithmetic
@@ -296,6 +319,19 @@ begin
   Assert.AreEqual<Integer>(4, FEval.Evaluate('sqrt(16)'));
   Assert.AreEqual<Integer>(1, FEval.Evaluate('Min(1, 2, 3)'));
   Assert.AreEqual<Integer>(3, FEval.Evaluate('Max(1, 2, 3)'));
+
+  // Wrong types and wrong argument counts must raise
+  AssertRaises('sqrt("a")');
+  AssertRaises('abs("x")');
+  AssertRaises('Min(1, "a")');
+  AssertRaises('Max("a", 1)');
+  AssertRaises('Sort(1, "a")');
+  AssertRaises('Sort("a", 1)');
+  AssertRaises('power(2)');
+  AssertRaises('Left("abc", -1)');
+  AssertRaises('Substr("abc", 0)');
+  AssertRaises('Now(1)');
+  AssertRaises('NoSuchFunction(1)');
 end;
 
 // 18. TestSortFunction
@@ -374,6 +410,24 @@ end;
 procedure TExprEvaluatorTests.TestErrorRecoveryAndValidation;
 begin
   // Test that valid expressions work
+  Assert.AreEqual<Integer>(5, FEval.Evaluate('2 + 3'));
+
+  // Malformed input raises...
+  AssertRaises('(1 + 2');
+  AssertRaises('1 +');
+  AssertRaises('"abc');
+  AssertRaises('1 + * 2');
+  AssertRaises('sqrt(');
+  AssertRaises('if true then 1');
+  AssertRaises('{ never closed');
+  AssertRaises('   ');
+  AssertRaises('// only a comment');
+  // the empty string is "nothing to evaluate", not an error
+  Assert.IsTrue(VarIsEmpty(FEval.Evaluate('')), 'empty expression must return Unassigned');
+
+  // ...and a failure inside a skipped branch leaves the evaluator fully usable
+  AssertRaises('if false then (1 +');
+  Assert.AreEqual<Integer>(4, FEval.Evaluate('sqrt(16)'));
   Assert.AreEqual<Integer>(5, FEval.Evaluate('2 + 3'));
 end;
 
@@ -818,6 +872,176 @@ begin
 
   Assert.AreEqual<Integer>(1, FEval.Evaluate('10 MOD 3'));
   Assert.AreEqual<Integer>(3, FEval.Evaluate('10 DIV 3'));
+end;
+
+procedure TExprEvaluatorTests.TestRoundFollowsDelphiRoundTo;
+begin
+  // same convention as Delphi's RoundTo: the second argument is a power of ten
+  Assert.AreEqual(3.14, Double(FEval.Evaluate('round(3.14159, -2)')), 0.0000001);
+  Assert.AreEqual(1234.57, Double(FEval.Evaluate('round(1234.567, -2)')), 0.0000001);
+  Assert.AreEqual(123.0, Double(FEval.Evaluate('round(123.45, 0)')), 0.0000001);
+  Assert.AreEqual(1200.0, Double(FEval.Evaluate('round(1234.567, 2)')), 0.0000001);
+end;
+
+procedure TExprEvaluatorTests.TestSemicolonInStringAndComment;
+begin
+  Assert.AreEqual<string>('a-b', FEval.Evaluate('Replace("a;b", ";", "-")'));
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('1 + 2 // note; still a comment'));
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('1 + 2 {a; b}'));
+  // a trailing separator is fine
+  Assert.AreEqual<Integer>(1, FEval.Evaluate('x := 1;'));
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('x := 1; y := 2; x + y;'));
+end;
+
+procedure TExprEvaluatorTests.TestKeywordFollowedByPunctuation;
+begin
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('not(true)'));
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('true and(false)'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('false or(true)'));
+  Assert.AreEqual<Integer>(1, FEval.Evaluate('10 mod(3)'));
+  Assert.AreEqual<Integer>(3, FEval.Evaluate('10 div(3)'));
+  Assert.AreEqual<Integer>(1, FEval.Evaluate('if true then(1) else(2)'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('"a" like"a"'));
+
+  // identifiers that merely start with a keyword stay identifiers
+  FEval.SetVar('notready', True);
+  FEval.SetVar('order', 7);
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('notready'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('1 < 2 and order > 5'));
+  AssertRaises('1or1');
+end;
+
+procedure TExprEvaluatorTests.TestNumberToStringUsesDot;
+var
+  Saved: Char;
+begin
+  // simulate a machine whose decimal separator is a comma
+  Saved := FormatSettings.DecimalSeparator;
+  FormatSettings.DecimalSeparator := ',';
+  try
+    Assert.AreEqual<string>('v=3.5', FEval.Evaluate('"v=" + 3.5'));
+    Assert.AreEqual<string>('3.5', FEval.Evaluate('ToString(3.5)'));
+    Assert.AreEqual<Double>(3.5, FEval.Evaluate('ToFloat(ToString(3.5))'));
+  finally
+    FormatSettings.DecimalSeparator := Saved;
+  end;
+end;
+
+procedure TExprEvaluatorTests.TestShortCircuitSkipsVariableLookup;
+var
+  Asked: Integer;
+begin
+  FEval.SetVar('present', False);
+  Assert.AreEqual<Boolean>(False, FEval.Evaluate('present and missing.field > 1'));
+  Assert.AreEqual<Boolean>(True, FEval.Evaluate('not present or missing'));
+  Assert.AreEqual<Integer>(1, FEval.Evaluate('if present then missing else 1'));
+
+  // the resolver is not even asked about names in a skipped branch
+  Asked := 0;
+  FEval.SetOnResolveExternalVariable(
+    function(const VarName: string; out Value: Variant): Boolean
+    begin
+      Inc(Asked);
+      Value := 1;
+      Result := True;
+    end);
+  FEval.Evaluate('present and other');
+  Assert.AreEqual<Integer>(0, Asked, 'resolver asked inside a skipped branch');
+  FEval.Evaluate('not present and other');
+  Assert.AreEqual<Integer>(1, Asked, 'resolver must be asked in the taken branch');
+end;
+
+procedure TExprEvaluatorTests.TestNonFiniteResultRaises;
+begin
+  AssertRaises('sqrt(-1)');
+  AssertRaises('log(0)');
+  AssertRaises('logn(0)');
+  AssertRaises('power(10, 400)');
+  AssertRaises('10 ^ 400');
+  Assert.AreEqual<Integer>(4, FEval.Evaluate('sqrt(16)'));
+end;
+
+procedure TExprEvaluatorTests.TestIdentifierCaseKeptForResolver;
+var
+  Seen: string;
+begin
+  Seen := '';
+  FEval.SetOnResolveExternalVariable(
+    function(const VarName: string; out Value: Variant): Boolean
+    begin
+      Seen := VarName;
+      Value := 1;
+      Result := True;
+    end);
+  FEval.Evaluate('Customer.Name');
+  Assert.AreEqual<string>('Customer.Name', Seen);
+
+  // internal names, functions and keywords stay case-insensitive
+  FEval.SetVar('Total', 5);
+  Assert.AreEqual<Integer>(5, FEval.Evaluate('TOTAL'));
+  FEval.RegisterFunction('Cube', function(const Args: array of Variant): Variant
+    begin
+      Result := System.Math.Power(Args[0], 3);
+    end);
+  Assert.AreEqual<Integer>(8, FEval.Evaluate('cube(2)'));
+  Assert.AreEqual<Integer>(8, FEval.Evaluate('CUBE(2)'));
+  Assert.AreEqual<Integer>(1, FEval.Evaluate('If True Then 1 Else 2'));
+end;
+
+procedure TExprEvaluatorTests.TestDateErrors;
+begin
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      FEval.Evaluate('ParseDate("2024-02-30")');
+    end,
+    Exception, 'ParseDate: "2024-02-30" is not a valid date');
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      FEval.Evaluate('ParseDate("2024/02/10")');
+    end,
+    Exception, 'ParseDate requires date string in YYYY-MM-DD format');
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      FEval.Evaluate('Year("not a date")');
+    end,
+    Exception, 'Year requires a valid date argument');
+  Assert.AreEqual<Integer>(29, FEval.Evaluate('Day(ParseDate("2024-02-29"))'));
+end;
+
+procedure TExprEvaluatorTests.TestArgumentValidationMessages;
+begin
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      FEval.Evaluate('sqrt(1, 2)');
+    end,
+    Exception, 'sqrt requires 1 argument(s), got 2');
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      FEval.Evaluate('Left("abc")');
+    end,
+    Exception, 'Left requires 2 argument(s) (string, count), got 1');
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      FEval.Evaluate('sqrt("a")');
+    end,
+    Exception, 'sqrt requires numeric argument');
+end;
+
+procedure TExprEvaluatorTests.TestVariableNames;
+var
+  Names: TArray<string>;
+begin
+  Assert.AreEqual<Integer>(0, Length(FEval.VariableNames));
+  FEval.Evaluate('b := 2; a := 1');
+  Names := FEval.VariableNames;
+  TArray.Sort<string>(Names);
+  Assert.AreEqual<string>('A,B', string.Join(',', Names));
 end;
 
 initialization
